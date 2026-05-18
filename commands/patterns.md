@@ -19,7 +19,7 @@ deployment "clowk-lp" "web" {
 
 ingress "clowk-lp" "web" {
   host = "${APP_HOST:-clowk.in}"
-  tls { enabled = true; provider = "letsencrypt"; email = "ops@clowk.in" }
+  tls { email = "ops@clowk.in" }
 }
 ```
 
@@ -42,12 +42,28 @@ Default is upsert-only, so each repo applies only its slice. Adding `--prune` wo
 
 ## 3. Build-mode vs image-mode
 
+`image` and `build {}` are mutually exclusive — parse error if both. Omitting both gives auto-detect at repo root.
+
 ```hcl
 # Build-mode (commitless deploy):
 deployment "clowk" "api" {
-  path = "."
-  lang { name = "ruby" version = "3.3" }
+  build {
+    context = "."
+    lang { name = "ruby" version = "3.3" }
+  }
 }
+
+# Build-mode (custom Dockerfile + build args):
+deployment "clowk" "api" {
+  build {
+    context    = "."
+    dockerfile = "Dockerfile"
+    args = { RUBY_VERSION = "3.3" }
+  }
+}
+
+# Build-mode (auto-detect):
+deployment "clowk" "api" {}      # no image, no build → builds repo root, sniffs runtime
 
 # Image-mode (registry pull):
 deployment "clowk" "api" {

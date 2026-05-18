@@ -12,7 +12,7 @@ Scoped kinds take **two labels**: `<scope>` `<name>`.
 
 ```hcl
 deployment "clowk" "api" {
-  image    = "ghcr.io/clowk/api:1.2.3"   # or omit for build-mode
+  image    = "ghcr.io/clowk/api:1.2.3"   # OR build { ... } — mutually exclusive
   replicas = 2
   ports    = ["8080"]
 
@@ -23,9 +23,29 @@ deployment "clowk" "api" {
 }
 ```
 
-Build-mode (no `image`): set `path = "."` and a `lang { name = ... }` block.
+**Build mode** — use `build { ... }` instead of `image`:
 
-Fields: `image`, `path`, `workdir`, `dockerfile`, `replicas`, `command`, `env`, `env_file`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`, `build_args`. Blocks: `lang`, `release`, `depends_on`, `resources`.
+```hcl
+deployment "clowk" "api" {
+  build {
+    context    = "."                     # docker build context, default "."
+    dockerfile = "Dockerfile"            # default name inside context
+    path       = "cmd/api"               # auto-generated Dockerfile only (`go build ./<path>`)
+    args = { NODE_VERSION = "24-alpine" }
+
+    lang {                               # optional; auto-detected from marker files when absent
+      name    = "bun"
+      version = "1.1"
+    }
+  }
+}
+```
+
+Auto-detect: omit both `image` AND `build {}` for the terse "build at repo root, sniff the runtime" shape — `deployment "x" "y" {}` is valid.
+
+Fields: `image`, `replicas`, `command`, `env`, `env_file`, `env_from`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`. Blocks: `build`, `release`, `depends_on`, `resources`.
+
+Inside `build {}`: `context`, `dockerfile`, `path`, `args`, plus nested `lang { name, version, entrypoint }`.
 
 ## `statefulset` — stateful, identity-stable
 
@@ -52,9 +72,7 @@ ingress "clowk" "api" {
   host = "api.clowk.in"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"   # letsencrypt | internal | (none)
-    email    = "ops@clowk.in"
+    email = "ops@clowk.in"     # enabled + provider = "letsencrypt" are the defaults
   }
 
   # path-based routing (optional)
@@ -65,11 +83,13 @@ ingress "clowk" "api" {
 
 `service` defaults to the ingress name; set it explicitly for cross-app routing.
 
+**TLS defaults:** declaring `tls {}` (even bare) flips `enabled = true` and `provider = "letsencrypt"`. To disable TLS, omit the entire block. Override provider with `"internal"` for dev/staging self-signed.
+
 ## `app` — sugar for deployment + ingress
 
 ```hcl
 app "myapp" "web" {
-  image    = "ghcr.io/me/myapp:latest"
+  image    = "ghcr.io/me/myapp:latest"   # OR build { ... }
   replicas = 3
   ports    = ["8080"]
 
@@ -78,12 +98,12 @@ app "myapp" "web" {
   host = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"            # defaults: enabled, letsencrypt
   }
 }
 ```
+
+`app` accepts the same `build { ... }` and `env_from = [...]` knobs as a standalone deployment — parity is the whole point of the sugar.
 
 ## `job` — manual one-shot
 

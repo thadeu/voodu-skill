@@ -7,7 +7,7 @@ Scope groups resources; name is unique within scope.
 
 ```hcl
 deployment "clowk" "api" {
-  image    = "ghcr.io/clowk/api:1.2.3"   # or path for build-mode
+  image    = "ghcr.io/clowk/api:1.2.3"
   replicas = 2
   ports    = ["8080"]
 
@@ -21,19 +21,47 @@ deployment "clowk" "api" {
 }
 ```
 
-**Build-mode** (no `image`):
+### Registry mode vs build mode
+
+`image = "..."` and `build { ... }` are **mutually exclusive** (parse error if both):
+
+- **Registry mode** — `image = "ghcr.io/..."`. Controller pulls and runs. CI publishes the image.
+- **Build mode** — `build { ... }` block. CLI tarballs the working tree, server runs `docker build`, tags `<scope>-<name>:latest` for the workload to pull.
 
 ```hcl
 deployment "clowk" "api" {
-  path     = "."                         # CWD of `vd apply`
   replicas = 2
   ports    = ["8080"]
 
-  lang { name = "bun" }                  # go | ruby | python | node | bun | ...
+  build {
+    context    = "."                     # docker build context, default "."
+    dockerfile = "Dockerfile"            # default name inside context
+    path       = "cmd/api"               # voodu-only: used by auto-generated Dockerfiles (Go: `go build ./<path>`)
+    args = {
+      NODE_VERSION = "24-alpine"         # docker --build-arg
+    }
+
+    lang {
+      name    = "bun"                    # go | ruby | rails | python | nodejs | bun | ...
+      version = "1.1"
+    }
+  }
 }
 ```
 
-Available fields: `image`, `path`, `workdir`, `dockerfile`, `replicas`, `command`, `env`, `env_file`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`, `build_args`. Blocks: `lang`, `release`, `depends_on`, `resources`.
+**Auto-detect** (omit both `image` and `build {}`): `vd apply` builds the repo root and auto-detects the runtime from marker files (`go.mod`, `Gemfile`, `package.json`, …). Generates a Dockerfile if your repo doesn't ship one. Equivalent to `build { context = "." }` plus auto-detected lang.
+
+```hcl
+deployment "demo" "web" {}   # implicit build mode at repo root
+```
+
+The tarball follows docker-build semantics: `.dockerignore` controls inclusion if present, otherwise `.gitignore`. Uncommitted changes ship — working tree, not git HEAD.
+
+### Available fields
+
+Root: `image`, `replicas`, `command`, `env`, `env_file`, `env_from`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`. Blocks: `build`, `release`, `depends_on`, `resources`.
+
+Inside `build { ... }`: `context`, `dockerfile`, `path`, `args`, plus nested `lang { name, version, entrypoint }`.
 
 ### Ports — loopback-only by default
 
@@ -107,9 +135,7 @@ ingress "clowk" "api" {
   port = 8080              # optional if the deployment already declares one
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@clowk.in"
+    email = "ops@clowk.in"   # enabled = true and provider = "letsencrypt" are the defaults
   }
 }
 ```
@@ -124,22 +150,24 @@ ingress "public" "api_http" {
 }
 ```
 
+### TLS — block-present = on
+
+Declaring `tls {}` (even bare) flips `enabled = true` and `provider = "letsencrypt"` by default. To **disable** TLS for an ingress, omit the entire block. To override the issuer (dev/staging), set `provider = "internal"`. An explicit `enabled = false` inside the block IS honoured — escape hatch for keeping the block declared while toggling TLS off.
+
 ### Four TLS profiles (provided by voodu-caddy)
 
 ```hcl
-# HTTP only — no TLS block
+# HTTP only — no TLS block at all
 ingress "x" "http" { host = "api.local"; service = "api" }
 
-# Let's Encrypt (HTTP-01, finite known hosts, no wildcards)
-tls { enabled = true; provider = "letsencrypt"; email = "ops@x.com" }
+# Let's Encrypt (default — HTTP-01, finite known hosts, no wildcards)
+tls { email = "ops@x.com" }
 
 # Internal CA (Caddy self-signed) — dev / staging
-tls { enabled = true; provider = "internal" }
+tls { provider = "internal" }
 
 # On-demand wildcard (the only profile that supports *.domain)
 tls {
-  enabled   = true
-  provider  = "letsencrypt"
   email     = "ssl@x.com"
   on_demand = true
   ask       = "http://app:3000/internal/allow_domain"   # REQUIRED
@@ -182,9 +210,7 @@ app "myapp" "web" {
   host = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 ```

@@ -16,9 +16,7 @@ ingress "clowk-lp" "web" {
   host = "${APP_HOST:-clowk.in}"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@clowk.in"
+    email = "ops@clowk.in"
   }
 }
 ```
@@ -55,20 +53,46 @@ Since the default is upsert-only, each repo applies only its slice without touch
 
 ## 3. Build-mode vs image-mode
 
-**Build-mode** (no CI needed — commitless):
+`image` and `build {}` are **mutually exclusive** — parse error if both. Pick one explicitly, or omit both for auto-detect.
+
+**Build-mode with explicit Dockerfile** (custom build args):
 
 ```hcl
 deployment "clowk" "api" {
-  path     = "."
   replicas = 2
   ports    = ["8080"]
 
-  lang { name = "ruby" version = "3.3" }
+  build {
+    context    = "."                # docker build context (default ".")
+    dockerfile = "Dockerfile"
+    args = {
+      RUBY_VERSION = "3.3"          # docker --build-arg
+    }
+  }
+}
+```
+
+**Build-mode auto-detect** (terse — voodu picks the lang from marker files):
+
+```hcl
+deployment "clowk" "api" {}         # equivalent to `build { context = "." }`
+```
+
+**Build-mode with explicit lang block** (between the two — declared runtime, no custom Dockerfile):
+
+```hcl
+deployment "clowk" "api" {
+  build {
+    lang {
+      name    = "ruby"
+      version = "3.3"
+    }
+  }
 }
 ```
 
 ```sh
-vd apply -f voodu.hcl -r prod   # tarball of CWD → SSH → server-side build
+vd apply -f voodu.hcl -r prod   # tarball of build.context → SSH → server-side build
 ```
 
 **Image-mode** (pull from registry):
@@ -80,7 +104,7 @@ deployment "clowk" "api" {
 }
 ```
 
-Build-mode is content-addressed: the same tree produces the same build-id, so the server skips rebuilds. Force one with `VOODU_FORCE_REBUILD=1 vd apply ...`.
+Build-mode is content-addressed: the same tree produces the same build-id, so the server skips rebuilds. Force one with `VOODU_FORCE_REBUILD=1 vd apply ...`. Tarball follows docker-build semantics — `.dockerignore` if present, otherwise `.gitignore`. Uncommitted changes ship.
 
 ## 4. Assets — configs as files
 

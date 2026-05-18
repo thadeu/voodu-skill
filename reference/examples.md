@@ -16,9 +16,7 @@ app "myapp" "web" {
   host = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"   # `enabled = true` and `provider = "letsencrypt"` are the defaults
   }
 }
 ```
@@ -27,15 +25,32 @@ app "myapp" "web" {
 vd apply -f voodu.hcl
 ```
 
+**Note on TLS defaults:** declaring `tls {}` at all flips `enabled = true` and `provider = "letsencrypt"` automatically. The example above only writes `email` — the two fields below are redundant unless you want to override:
+
+```hcl
+tls {
+  enabled  = true              # default when block is present
+  provider = "letsencrypt"     # default issuer
+  email    = "ops@example.com"
+}
+```
+
+Override `provider = "internal"` for dev/staging self-signed (no public DNS needed). Omit the entire `tls {}` block to disable TLS.
+
 ## Build-mode app (no pre-built image)
 
 ```hcl
 deployment "clowk" "api" {
-  path     = "."
   replicas = 2
   ports    = ["8080"]
 
-  lang { name = "bun" version = "1.1" }
+  build {
+    context = "."                    # default; can omit
+    lang {
+      name    = "bun"
+      version = "1.1"
+    }
+  }
 
   health_check = "/healthz"
 }
@@ -44,16 +59,31 @@ ingress "clowk" "api" {
   host = "api.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 ```
 
 ```sh
-vd apply -f voodu.hcl   # tarball of CWD → SSH → server-side build
+vd apply -f voodu.hcl   # tarball of build.context → SSH → server-side build
 ```
+
+For a custom Dockerfile + build args (docker-compose-shaped):
+
+```hcl
+deployment "clowk" "api" {
+  build {
+    context    = "."
+    dockerfile = "Dockerfile.api"
+    args = {
+      BUN_VERSION = "1.1"
+      GIT_SHA     = "${GIT_SHA:-dev}"
+    }
+  }
+}
+```
+
+For the terse "auto-detect everything" form: `deployment "clowk" "api" {}` — voodu sniffs the runtime from marker files (`go.mod`, `Gemfile`, `package.json`, …) and generates a Dockerfile if your repo doesn't ship one.
 
 ## Single-node postgres + app
 
@@ -76,9 +106,7 @@ app "myapp" "web" {
   host = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 ```
@@ -152,9 +180,7 @@ ingress "acme" "api-v1" {
   location { path = "/api/v1" }
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 
@@ -164,9 +190,7 @@ ingress "acme" "api-v2" {
   location { path = "/api/v2" }
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 ```
@@ -180,8 +204,6 @@ ingress "saas" "tenants" {
   port    = 3000
 
   tls {
-    enabled   = true
-    provider  = "letsencrypt"
     email     = "ssl@mysaas.io"
     on_demand = true
     ask       = "http://app:3000/internal/allow_domain"
@@ -232,9 +254,7 @@ app "myapp" "web" {
   host         = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"
   }
 }
 ```

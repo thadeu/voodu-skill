@@ -33,4 +33,5 @@ Display the following cheat sheet to the user, verbatim, as markdown.
 - **Default: upsert-only.** `vd apply` only creates/updates. Pass `--prune` to delete what disappeared.
 - **Secrets stay out of HCL.** Use `vd config set` — overrides `env {}` blocks.
 - **`scope` is a free-form grouping label.** Names are unique per scope.
-- **Build-mode vs image-mode.** With `image`, server pulls. Without it (`path = "."`), tarball ships over SSH.
+- **Build-mode vs image-mode.** `image = "..."` and `build { ... }` are mutually exclusive. With `image`, the server pulls from the registry. With `build { context = "..." }` (or just omit both for auto-detect at repo root), the CLI tarballs the working tree and ships it over SSH.
+- **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the block entirely to disable TLS.

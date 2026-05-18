@@ -21,9 +21,7 @@ app "myapp" "web" {
   host = "myapp.example.com"
 
   tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
+    email = "ops@example.com"   # enabled + provider = "letsencrypt" are the defaults
   }
 }
 ```
@@ -36,20 +34,27 @@ vd apply -f voodu.hcl
 
 ```hcl
 deployment "clowk" "api" {
-  path     = "."
   replicas = 2
   ports    = ["8080"]
 
-  lang { name = "bun" version = "1.1" }
+  build {
+    context = "."                  # default; can omit
+    lang {
+      name    = "bun"
+      version = "1.1"
+    }
+  }
 
   health_check = "/healthz"
 }
 
 ingress "clowk" "api" {
   host = "api.example.com"
-  tls  { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
+  tls  { email = "ops@example.com" }
 }
 ```
+
+For a custom Dockerfile + build args: `build { context = ".", dockerfile = "Dockerfile", args = { BUN_VERSION = "1.1" } }`. Or omit `build {}` entirely (`deployment "x" "y" {}`) for repo-root auto-detect.
 
 ## Single-node postgres + app
 
@@ -66,7 +71,7 @@ app "myapp" "web" {
   ports = ["8080"]
   host  = "myapp.example.com"
 
-  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
+  tls { email = "ops@example.com" }
 }
 ```
 
@@ -125,14 +130,14 @@ ingress "acme" "api-v1" {
   host    = "api.example.com"
   service = "api-v1"
   location { path = "/api/v1" }
-  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
+  tls { email = "ops@example.com" }
 }
 
 ingress "acme" "api-v2" {
   host    = "api.example.com"
   service = "api-v2"
   location { path = "/api/v2" }
-  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
+  tls { email = "ops@example.com" }
 }
 ```
 
@@ -145,8 +150,6 @@ ingress "saas" "tenants" {
   port    = 3000
 
   tls {
-    enabled   = true
-    provider  = "letsencrypt"
     email     = "ssl@mysaas.io"
     on_demand = true
     ask       = "http://app:3000/internal/allow_domain"
@@ -194,7 +197,7 @@ app "myapp" "web" {
   health_check = "/healthz"
   host         = "myapp.example.com"
 
-  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
+  tls { email = "ops@example.com" }
 }
 ```
 

@@ -56,5 +56,7 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 - **Default: upsert-only.** `vd apply` only creates/updates. To delete what disappeared from the manifest: `vd apply --prune` (opt-in, scoped by `(scope, kind)`).
 - **Secrets live outside the manifest.** Use `vd config set` — its values override `env {}` blocks in HCL.
 - **`scope` is a free-form grouping label.** Names are unique per scope. `deployment "clowk" "api"` is distinct from `deployment "prod" "api"`.
-- **Build-mode (CWD)**: with no `image` field, voodu ships a tarball of the current directory over SSH. **Image-mode**: with `image`, the controller pulls from the registry.
+- **Image-mode vs build-mode.** `image = "..."` and `build { ... }` are mutually exclusive (parse error if both). With `image`, the controller pulls from the registry. With `build { context = "..." }`, the CLI tarballs the working tree over SSH. Omitting both gives auto-detect at repo root. The `build {}` block is docker-compose-shaped (`context`, `dockerfile`, `args`, nested `lang {}`).
+- **`env_from = ["scope/name"]`** stacks env files from another resource at the bottom of the layer, with the current resource's own env winning on collisions. Supported on `deployment`, `app`, `statefulset`, `job`, `cronjob`.
+- **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the entire block to disable TLS. Override `provider = "internal"` for dev/staging self-signed.
 - **Ports are loopback-only by default.** `ports = ["8080"]` binds `127.0.0.1:8080`. Public exposure needs an explicit IP (`0.0.0.0:8080:8080`) — but the normal path is an `ingress`.
