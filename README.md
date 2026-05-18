@@ -1,66 +1,74 @@
 # voodu-claudekit
 
-Claude Code skill para consulta rápida do CLI `voodu` / `vd`.
+Claude Code skill + slash commands for the [voodu](https://github.com/thadeu/clowk-voodu) CLI.
 
-Sem teoria, sem reler README do voodu cada vez que esqueci o nome dum comando. Mapa de comandos + manifestos HCL + patterns prontos pra colar.
+Stop re-reading the voodu README every time you forget a flag. Type `/vd:apply` (or `/vd:config`, `/vd:logs`, etc.) and get a focused cheat sheet right inside Claude Code.
 
-## O que tem aqui
+## What's in here
 
-- `SKILL.md` — entry point com mapa de comandos
-- `reference/apply.md` — `apply`, `diff`, `delete`, prune
-- `reference/manifests.md` — todos os kinds HCL (deployment, statefulset, ingress, app, asset, job, cronjob, postgres, redis)
-- `reference/config.md` — `vd config` (env vars, buckets virtuais)
-- `reference/pods.md` — `logs`, `exec`, `run`, `restart`, `rollback`, `describe`, `get`
-- `reference/remotes.md` — multi-server via SSH
-- `reference/plugins.md` — plugins oficiais (caddy, postgres, redis, mongo)
-- `reference/patterns.md` — multi-env, shared-scope, assets, build-mode
-- `reference/examples.md` — manifestos prontos
+- **`SKILL.md`** — skill entry point. Index of commands + voodu fundamentals.
+- **`reference/`** — deep-dive docs (loaded by the agent when it needs more context).
+  - `apply.md` — `apply`, `diff`, `delete`, prune semantics
+  - `manifests.md` — every HCL kind (deployment, statefulset, ingress, app, asset, job, cronjob, postgres, redis, mongo)
+  - `config.md` — `vd config` (env vars, virtual buckets)
+  - `pods.md` — `logs`, `exec`, `run`, `restart`, `rollback`, `describe`, `get`
+  - `remotes.md` — multi-server SSH
+  - `plugins.md` — official plugins (caddy, postgres, redis, mongo)
+  - `patterns.md` — multi-env, shared-scope, build-mode, assets, secret seeding
+  - `examples.md` — ready-to-paste manifests
+- **`commands/`** — slash commands. One file per verb (`apply.md`, `diff.md`, ...) — typing `/vd:apply` displays the matching cheat sheet.
 
-## Instalação
+## Install
 
-### Como submodule (recomendado)
+### Option A — `install.sh` (recommended)
 
 ```sh
-cd ~/.claude/skills
-git submodule add https://github.com/thadeu/voodu-claudekit voodu
+git clone https://github.com/thadeu/voodu-claudekit ~/code/voodu-claudekit
+~/code/voodu-claudekit/install.sh
 ```
 
-Próxima vez que abrir o Claude Code, ele detecta `~/.claude/skills/voodu/SKILL.md` e ativa quando você perguntar sobre voodu.
+The script symlinks:
 
-### Como clone simples
+- `~/.claude/skills/voodu` → repo root (skill discovery)
+- `~/.claude/commands/vd` → `repo/commands` (slash command namespace)
+
+### Option B — git submodule
 
 ```sh
-git clone https://github.com/thadeu/voodu-claudekit ~/.claude/skills/voodu
+cd ~/.claude
+git submodule add https://github.com/thadeu/voodu-claudekit skills/voodu
+ln -s skills/voodu/commands commands/vd
 ```
 
 ### Update
 
 ```sh
-cd ~/.claude/skills/voodu
-git pull
+cd ~/.claude/skills/voodu && git pull
 ```
 
-Submodule:
+Or with submodules:
 
 ```sh
-cd ~/.claude
-git submodule update --remote skills/voodu
+cd ~/.claude && git submodule update --remote skills/voodu
 ```
 
-## Como o Claude usa
+## Usage
 
-Quando você perguntar coisas tipo:
+Once installed, open Claude Code in any project. Try:
 
-- "Como apago um deployment no voodu?"
-- "Qual a sintaxe pra cronjob?"
-- "Tenho um app Rails, monta um manifesto"
-- "Como rodo migration?"
+- `/vd:help` — index of every slash command
+- `/vd:apply` — apply / flags / examples
+- `/vd:config` — env-var management
+- `/vd:logs`, `/vd:exec`, `/vd:run`, `/vd:restart` — runtime ops
+- `/vd:manifests` — every HCL kind
+- `/vd:patterns` — multi-env, shared-scope, build-mode
+- `/vd:examples` — copy-paste-ready manifests
 
-O Claude carrega o `SKILL.md`, vê o mapa, e abre só o arquivo de referência relevante (não joga 8 docs no contexto).
+The skill itself also fires automatically when you ask questions like "how do I roll back a deployment in voodu?" — Claude loads `SKILL.md` and pulls the matching reference doc.
 
 ## Voodu
 
-Projeto: https://github.com/thadeu/clowk-voodu
+Project: https://github.com/thadeu/clowk-voodu
 
 ## License
 

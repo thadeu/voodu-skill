@@ -1,8 +1,8 @@
-# Patterns úteis
+# Patterns
 
-## 1. Multi-env: 1 manifesto, N servidores
+## 1. Multi-env: one manifest, N servers
 
-Arquivo único (`app.voodu`), só muda `-r`:
+Single file (`app.voodu`), only `-r` changes:
 
 ```hcl
 deployment "clowk-lp" "web" {
@@ -28,9 +28,9 @@ APP_HOST=staging.clowk.in IMAGE_TAG=v1.2.3 vd apply -f app.voodu -r staging
 APP_HOST=clowk.in        IMAGE_TAG=v1.2.3 vd apply -f app.voodu -r prod-1
 ```
 
-## 2. Shared scope (vários repos, mesmo scope)
+## 2. Shared scope (many repos, one scope)
 
-Cada repo declara só seu pedaço:
+Each repo declares only its own slice:
 
 ```hcl
 # repo clowk/
@@ -43,19 +43,19 @@ deployment "clowk" "lp"  { image = "ghcr.io/clowk/lp:1" }
 deployment "clowk" "api" { image = "ghcr.io/clowk/api:1" }
 ```
 
-CI pipeline em todos, sem `--prune`:
+CI for each repo, plain apply (no `--prune`):
 
 ```sh
-vd apply -f voodu.hcl -r prod         # NÃO passa --prune
+vd apply -f voodu.hcl -r prod         # DO NOT pass --prune
 ```
 
-Como o default é upsert-only, cada repo aplica só o seu sem mexer nos outros. Se algum CI passar `--prune`, apaga os irmãos no mesmo `(scope, kind)`.
+Since the default is upsert-only, each repo applies only its slice without touching siblings. Passing `--prune` would wipe the other deployments in the same `(scope, kind)`.
 
-> Quando preferir scope por repo: se você não precisa **agrupar** os apps. Aí vira `clowk-app`, `clowk-lp`, `clowk-api` — ownership óbvio, e dá pra usar `--prune` à vontade em cada um.
+> When to prefer a scope-per-repo instead: when you don't actually need to **group** the apps. Make them `clowk-app`, `clowk-lp`, `clowk-api` — ownership is obvious, and you can use `--prune` freely in each.
 
 ## 3. Build-mode vs image-mode
 
-**Build-mode** (CI nem precisa, é commitless):
+**Build-mode** (no CI needed — commitless):
 
 ```hcl
 deployment "clowk" "api" {
@@ -68,10 +68,10 @@ deployment "clowk" "api" {
 ```
 
 ```sh
-vd apply -f voodu.hcl -r prod   # tarball do CWD → SSH → build no server
+vd apply -f voodu.hcl -r prod   # tarball of CWD → SSH → server-side build
 ```
 
-**Image-mode** (pulla do registry):
+**Image-mode** (pull from registry):
 
 ```hcl
 deployment "clowk" "api" {
@@ -80,9 +80,9 @@ deployment "clowk" "api" {
 }
 ```
 
-Build-mode é content-addressed: mesma árvore = mesmo build-id, server pula rebuild. Pra forçar: `VOODU_FORCE_REBUILD=1 vd apply ...`.
+Build-mode is content-addressed: the same tree produces the same build-id, so the server skips rebuilds. Force one with `VOODU_FORCE_REBUILD=1 vd apply ...`.
 
-## 4. Assets — configs como arquivo
+## 4. Assets — configs as files
 
 `postgresql.conf`, `redis.conf`, ACLs, MOTDs:
 
@@ -109,29 +109,33 @@ postgres "data" "pg" {
 }
 ```
 
-Edita `./configs/postgresql.conf` localmente → `vd apply` → hash do asset muda → rolling restart automático. Sem `vd restart`.
+Edit `./configs/postgresql.conf` locally → `vd apply` → asset hash changes → automatic rolling restart. No `vd restart` needed.
 
-## 5. Secret seeding antes do primeiro apply
+## 5. Seeding secrets before the first apply
 
-Stateful (postgres, redis) precisa de senha. Ordem:
+Stateful resources (postgres, redis) need passwords. Order:
 
 ```sh
 PG_PASS=$(openssl rand -hex 16)
 
-# 1. Cria bucket de config ANTES do statefulset existir
-vd config set -s data -n pg POSTGRES_PASSWORD=$PG_PASS
+# 1. Create the config bucket BEFORE the statefulset exists
+vd config data/pg set POSTGRES_PASSWORD=$PG_PASS
 
-# 2. Cria buckets do app (DATABASE_URL etc)
-vd config set -s myapp DATABASE_URL="postgres://postgres:$PG_PASS@pg-0.data:5432/myapp"
+# 2. Wire the consumer
+vd config myapp/web set \
+  DATABASE_URL="postgres://postgres:$PG_PASS@pg-0.data:5432/myapp"
 
-# 3. Agora sim, apply
+# 3. Now apply
 vd apply -f voodu.hcl
 ```
 
 ## 6. env_from — ConfigMap-style
 
 ```sh
-vd config set aws/cli AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_REGION=us-east-1
+vd config aws/cli set \
+  AWS_ACCESS_KEY_ID=... \
+  AWS_SECRET_ACCESS_KEY=... \
+  AWS_REGION=us-east-1
 ```
 
 ```hcl
@@ -139,21 +143,21 @@ cronjob "clowk" "s3-backup" {
   schedule = "0 4 * * *"
   image    = "amazon/aws-cli"
   command  = ["s3", "sync", "/data", "s3://backups/clowk"]
-  env_from = ["aws/cli"]              # herda tudo
+  env_from = ["aws/cli"]              # inherits all keys
 }
 ```
 
-Bucket virtual `aws/cli` existe sem manifesto declarado.
+The virtual bucket `aws/cli` exists without a declared manifest.
 
-## 7. Plugin macro com customização
+## 7. Plugin macro with customisation
 
-`postgres` é dumb alias de `statefulset` — operator declara overrides, plugin preenche o resto:
+`postgres` is a thin alias of `statefulset` — operator declares overrides, plugin fills the rest:
 
 ```hcl
 postgres "data" "pg" {
   plugin { version = "0.2.0" }
 
-  # tudo abaixo vence o default do plugin:
+  # everything below wins over the plugin defaults:
   image    = "postgres:15-alpine"
   replicas = 2                        # primary + 1 replica
 
@@ -165,9 +169,9 @@ postgres "data" "pg" {
 }
 ```
 
-Pra config completa, use `asset` + `command = ["postgres", "-c", "config_file=..."]`.
+For full config, use `asset` + `command = ["postgres", "-c", "config_file=..."]`.
 
-## 8. CI gating com `vd diff`
+## 8. CI gating with `vd diff`
 
 ```sh
 vd diff -f voodu.hcl --detailed-exitcode
@@ -176,9 +180,9 @@ vd diff -f voodu.hcl --detailed-exitcode
 # exit 2 = changes pending
 ```
 
-Falha o PR se houver drift, ou exige apply manual depois do merge.
+Fail the PR on drift, or gate the apply step behind an explicit "yes there are changes" signal.
 
-## 9. Volumes persistentes — sobreviver a delete
+## 9. Persistent volumes — surviving delete
 
 ```hcl
 statefulset "data" "pg" {
@@ -187,8 +191,8 @@ statefulset "data" "pg" {
 ```
 
 ```sh
-vd delete statefulset/data/pg           # apaga pod, MANTÉM volume
-vd apply -f voodu.hcl                   # recria pod, dados intactos
+vd delete statefulset/data/pg           # delete the pod, KEEP the volume
+vd apply -f voodu.hcl                   # recreate the pod, data intact
 
-vd delete statefulset/data/pg --prune   # apaga pod E volume (irreversível)
+vd delete statefulset/data/pg --prune   # delete pod AND volume (irreversible)
 ```

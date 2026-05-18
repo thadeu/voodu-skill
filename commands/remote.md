@@ -1,4 +1,10 @@
-# Remotes — multi-server
+---
+description: vd remote — SSH targets for multi-server deploys
+---
+
+Display the following cheat sheet to the user, verbatim, as markdown.
+
+# `vd remote` — SSH targets
 
 A **remote** is just an SSH target stored as a git remote. No separate config file.
 
@@ -10,7 +16,6 @@ vd remote setup staging ubuntu@staging.example.com --binary ./bin/voodu
 
 # Or register an already-provisioned host:
 vd remote add prod-1 ubuntu@prod-1.example.com
-vd remote add prod-2 ubuntu@prod-2.example.com
 
 # With a specific identity file:
 vd remote add prod ubuntu@prod.example.com:~/.ssh/prod_id_rsa
@@ -35,7 +40,7 @@ vd apply -f voodu.hcl -r prod-1
 
 `-r` is shorthand for `--remote`.
 
-## Fan-out: deploy to N hosts
+## Fan-out across many hosts
 
 ```sh
 for r in prod-1 prod-2 prod-3; do
@@ -43,14 +48,12 @@ for r in prod-1 prod-2 prod-3; do
 done
 ```
 
-The manifest is **the same** — only `-r` changes. Scope+name in the HCL is the app identity, stable across every environment.
+The manifest is **identical** — only `-r` changes. Scope+name is the app identity, stable across every environment.
 
 ## When the `voodu` git remote helps
-
-For a repo that targets a single server:
 
 ```sh
 git remote add voodu ssh://ubuntu@prod.example.com/~/app
 ```
 
-After that, `vd apply -f voodu.hcl` (no `-r`) just works.
+After that, `vd apply -f voodu.hcl` with no `-r` "just works" against that host.

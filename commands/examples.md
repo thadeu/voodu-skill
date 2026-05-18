@@ -1,9 +1,14 @@
-# Ready-to-paste examples
+---
+description: Ready-to-paste voodu manifests for common shapes
+---
+
+Display the following cheat sheet to the user, verbatim, as markdown.
+
+# voodu — ready-to-paste manifests
 
 ## Simple app (deployment + ingress + TLS)
 
 ```hcl
-# voodu.hcl
 app "myapp" "web" {
   image    = "ghcr.io/me/myapp:latest"
   replicas = 2
@@ -27,7 +32,7 @@ app "myapp" "web" {
 vd apply -f voodu.hcl
 ```
 
-## Build-mode app (no pre-built image)
+## Build-mode app
 
 ```hcl
 deployment "clowk" "api" {
@@ -42,23 +47,13 @@ deployment "clowk" "api" {
 
 ingress "clowk" "api" {
   host = "api.example.com"
-
-  tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
-  }
+  tls  { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
 }
-```
-
-```sh
-vd apply -f voodu.hcl   # tarball of CWD → SSH → server-side build
 ```
 
 ## Single-node postgres + app
 
 ```hcl
-# voodu.hcl
 postgres "data" "pg" {
   plugin { version = "0.2.0" }
   image = "postgres:15-alpine"
@@ -67,19 +62,11 @@ postgres "data" "pg" {
 }
 
 app "myapp" "web" {
-  image    = "ghcr.io/me/myapp:latest"
-  replicas = 2
-  ports    = ["8080"]
+  image = "ghcr.io/me/myapp:latest"
+  ports = ["8080"]
+  host  = "myapp.example.com"
 
-  env = { PORT = "8080" }
-
-  host = "myapp.example.com"
-
-  tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
-  }
+  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
 }
 ```
 
@@ -101,35 +88,23 @@ cronjob "clowk" "s3-backup" {
   command = ["s3", "sync", "/data", "s3://backups/clowk"]
 
   env_from = ["aws/cli"]
-
-  volumes = ["/var/backups/clowk:/data:ro"]
-
-  successful_history_limit = 3
-  failed_history_limit     = 5
+  volumes  = ["/var/backups/clowk:/data:ro"]
 }
 ```
 
 ```sh
-# shared bucket for credentials
-vd config aws/cli set \
-  AWS_ACCESS_KEY_ID=... \
-  AWS_SECRET_ACCESS_KEY=... \
-  AWS_REGION=us-east-1
-
+vd config aws/cli set AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
 vd apply -f cronjob.hcl
-
-# trigger immediately, bypassing the schedule:
-vd run clowk/s3-backup
+vd run clowk/s3-backup     # trigger now
 ```
 
-## One-shot migration (`job`)
+## Migration job
 
 ```hcl
 job "clowk-lp" "migrate" {
   image    = "ghcr.io/clowk/lp:latest"
   command  = ["rails", "db:migrate"]
-
-  env_from = ["clowk-lp/web"]    # inherit DATABASE_URL etc from the web deployment
+  env_from = ["clowk-lp/web"]
   timeout  = "10m"
 }
 ```
@@ -140,7 +115,7 @@ vd run clowk-lp/migrate
 vd logs clowk-lp/migrate -f
 ```
 
-## Versioned API (same host, different paths)
+## Versioned API (one host, two services)
 
 ```hcl
 deployment "acme" "api-v1" { image = "ghcr.io/acme/api-v1:latest" }
@@ -150,28 +125,18 @@ ingress "acme" "api-v1" {
   host    = "api.example.com"
   service = "api-v1"
   location { path = "/api/v1" }
-
-  tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
-  }
+  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
 }
 
 ingress "acme" "api-v2" {
   host    = "api.example.com"
   service = "api-v2"
   location { path = "/api/v2" }
-
-  tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
-  }
+  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
 }
 ```
 
-## Wildcard multi-tenant (`*.mysaas.io`)
+## Wildcard multi-tenant
 
 ```hcl
 ingress "saas" "tenants" {
@@ -189,12 +154,11 @@ ingress "saas" "tenants" {
 }
 ```
 
-Your app must serve `GET /internal/allow_domain?domain=foo.mysaas.io` → 200 (allow) or 4xx (deny).
+App must serve `GET /internal/allow_domain?domain=foo.mysaas.io` → 200 (allow) or 4xx (deny).
 
 ## Full stack: postgres + redis + app + ingress
 
 ```hcl
-# voodu.hcl
 asset "data" "pg-config" {
   postgresql_conf = file("./configs/postgresql.conf")
   pg_hba_conf     = file("./configs/pg_hba.conf")
@@ -225,22 +189,16 @@ app "myapp" "web" {
   image    = "ghcr.io/me/myapp:latest"
   replicas = 3
   ports    = ["8080"]
-
-  env = { PORT = "8080" NODE_ENV = "production" }
+  env      = { PORT = "8080" NODE_ENV = "production" }
 
   health_check = "/healthz"
   host         = "myapp.example.com"
 
-  tls {
-    enabled  = true
-    provider = "letsencrypt"
-    email    = "ops@example.com"
-  }
+  tls { enabled = true; provider = "letsencrypt"; email = "ops@example.com" }
 }
 ```
 
 ```sh
-# One-time setup:
 PG_PASS=$(openssl rand -hex 16)
 vd config data/pg set POSTGRES_PASSWORD=$PG_PASS
 vd config myapp/web set \

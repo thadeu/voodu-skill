@@ -1,49 +1,49 @@
-# Manifestos HCL — todos os kinds
+# HCL manifests — every kind
 
-Todos os kinds escopados usam **duas labels**: `<scope>` e `<name>`.
-Scope agrupa, name é único dentro do scope.
+Scoped kinds take **two labels**: `<scope>` and `<name>`.
+Scope groups resources; name is unique within scope.
 
-## `deployment` — stateless
+## `deployment` — stateless replicas
 
 ```hcl
 deployment "clowk" "api" {
-  image    = "ghcr.io/clowk/api:1.2.3"   # ou path para build-mode
+  image    = "ghcr.io/clowk/api:1.2.3"   # or path for build-mode
   replicas = 2
   ports    = ["8080"]
 
   env = {
-    PORT = "8080"
+    PORT     = "8080"
     NODE_ENV = "production"
   }
 
-  restart      = "always"                # always|on-failure|no
+  restart      = "always"                # always | on-failure | no
   health_check = "/healthz"              # default "/"
 }
 ```
 
-**Build-mode** (sem `image`):
+**Build-mode** (no `image`):
 
 ```hcl
 deployment "clowk" "api" {
-  path     = "."                         # CWD do `vd apply`
+  path     = "."                         # CWD of `vd apply`
   replicas = 2
   ports    = ["8080"]
 
-  lang { name = "bun" }                  # go|ruby|python|node|bun…
+  lang { name = "bun" }                  # go | ruby | python | node | bun | ...
 }
 ```
 
-Campos disponíveis: `image`, `path`, `workdir`, `dockerfile`, `replicas`, `command`, `env`, `env_file`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`, `build_args`, blocos: `lang`, `release`, `depends_on`, `resources`.
+Available fields: `image`, `path`, `workdir`, `dockerfile`, `replicas`, `command`, `env`, `env_file`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`, `build_args`. Blocks: `lang`, `release`, `depends_on`, `resources`.
 
-### Ports — loopback-only por default
+### Ports — loopback-only by default
 
-`ports = ["8080"]` mapeia em `127.0.0.1:8080`. Pra expor publicamente, declare IP explicitamente:
+`ports = ["8080"]` maps to `127.0.0.1:8080`. To expose publicly, declare the IP explicitly:
 
 ```hcl
 ports = ["0.0.0.0:8080:8080"]
 ```
 
-Mas em geral exposição pública vai por **ingress**, não pelo deployment.
+In practice, public exposure goes through an **ingress**, not the deployment.
 
 ### Resources (CPU/memory, k8s-style)
 
@@ -53,14 +53,14 @@ deployment "clowk" "api" {
 
   resources {
     limits {
-      cpu    = "2"          # ou "500m"
-      memory = "1Gi"        # ou "512Mi", "2G", bytes
+      cpu    = "2"          # or "500m"
+      memory = "1Gi"        # or "512Mi", "2G", plain bytes
     }
   }
 }
 ```
 
-### Release phase (pré/pós deploy)
+### Release phase (pre/post deploy)
 
 ```hcl
 deployment "clowk" "api" {
@@ -73,7 +73,7 @@ deployment "clowk" "api" {
 }
 ```
 
-## `statefulset` — stateful, pods com identidade
+## `statefulset` — stateful, identity-stable pods
 
 ```hcl
 statefulset "data" "pg" {
@@ -84,7 +84,7 @@ statefulset "data" "pg" {
   env = {
     POSTGRES_DB = "myapp"
     PGDATA      = "/var/lib/postgresql/data/pgdata"
-    # senha NUNCA aqui — use `vd config set`
+    # passwords never in HCL — use `vd config set`
   }
 
   volume_claim "data" {
@@ -93,17 +93,18 @@ statefulset "data" "pg" {
 }
 ```
 
-Diferenças do `deployment`:
-- Pods têm DNS estável: `pg-0.data`, `pg-1.data` (+ round-robin `pg.data`).
-- Cada ordinal tem volume Docker próprio (`voodu-data-pg-data-0`, …).
-- Volumes sobrevivem a restart/rebuild. Só somem com `vd delete … --prune`.
+How it differs from `deployment`:
+
+- Pods have stable DNS: `pg-0.data`, `pg-1.data` (plus the round-robin `pg.data`).
+- Each ordinal owns its own Docker volume (`voodu-data-pg-data-0`, ...).
+- Volumes survive restart and rebuild. They go away only with `vd delete ... --prune`.
 
 ## `ingress` — host routing + TLS
 
 ```hcl
 ingress "clowk" "api" {
   host = "api.clowk.in"
-  port = 8080              # opcional se deployment já declara
+  port = 8080              # optional if the deployment already declares one
 
   tls {
     enabled  = true
@@ -113,35 +114,35 @@ ingress "clowk" "api" {
 }
 ```
 
-**Service** default = nome do ingress. Rotear cross-app:
+`service` defaults to the ingress name. Cross-app routing:
 
 ```hcl
 ingress "public" "api_http" {
   host    = "api.internal"
-  service = "api"          # aponta pra deployment "public" "api"
+  service = "api"          # points at deployment "public" "api"
   port    = 3000
 }
 ```
 
-### 4 perfis TLS (precisa do plugin voodu-caddy)
+### Four TLS profiles (provided by voodu-caddy)
 
 ```hcl
-# HTTP only — sem TLS block
+# HTTP only — no TLS block
 ingress "x" "http" { host = "api.local"; service = "api" }
 
-# Let's Encrypt
+# Let's Encrypt (HTTP-01, finite known hosts, no wildcards)
 tls { enabled = true; provider = "letsencrypt"; email = "ops@x.com" }
 
-# Self-signed (dev)
+# Internal CA (Caddy self-signed) — dev / staging
 tls { enabled = true; provider = "internal" }
 
-# On-demand wildcard (single legit profile pra *.dominio)
+# On-demand wildcard (the only profile that supports *.domain)
 tls {
   enabled   = true
   provider  = "letsencrypt"
   email     = "ssl@x.com"
   on_demand = true
-  ask       = "http://app:3000/internal/allow_domain"   # OBRIGATÓRIO
+  ask       = "http://app:3000/internal/allow_domain"   # REQUIRED
 }
 ```
 
@@ -156,16 +157,16 @@ ingress "acme" "api" {
 }
 ```
 
-Strip prefix antes do upstream:
+Strip prefix before forwarding upstream:
 
 ```hcl
 location {
   path  = "/docs/voodu"
-  strip = true             # backend vê /getting-started
+  strip = true             # backend sees /getting-started
 }
 ```
 
-## `app` — sugar pra deployment + ingress
+## `app` — sugar for deployment + ingress
 
 ```hcl
 app "myapp" "web" {
@@ -177,7 +178,7 @@ app "myapp" "web" {
 
   health_check = "/healthz"
 
-  # Ingress side
+  # ingress side
   host = "myapp.example.com"
 
   tls {
@@ -188,9 +189,9 @@ app "myapp" "web" {
 }
 ```
 
-Internamente expande pra `deployment + ingress` com o mesmo `(scope, name)`.
+Expands server-side into a `deployment` + `ingress` pair with the same `(scope, name)`.
 
-## `job` — execução one-shot manual
+## `job` — manual one-shot
 
 ```hcl
 job "clowk-lp" "migrate" {
@@ -198,16 +199,16 @@ job "clowk-lp" "migrate" {
 
   command = ["rails", "db:migrate"]
 
-  env = { RAILS_ENV = "production" }
-  env_from = ["clowk-lp/web"]    # herda config da deployment "web"
+  env      = { RAILS_ENV = "production" }
+  env_from = ["clowk-lp/web"]    # inherit config bucket from the web deployment
 
   timeout = "10m"
 }
 ```
 
-Roda só quando você chama: `vd run clowk-lp/migrate`.
+Runs only when you call: `vd run clowk-lp/migrate`.
 
-## `cronjob` — job agendado
+## `cronjob` — scheduled job
 
 ```hcl
 cronjob "clowk-lp" "nightly-backup" {
@@ -219,21 +220,21 @@ cronjob "clowk-lp" "nightly-backup" {
 
   env_from = ["clowk-lp/web"]
 
-  concurrency_policy        = "Forbid"   # Allow|Forbid|Replace
+  concurrency_policy        = "Forbid"   # Allow | Forbid | Replace
   successful_history_limit  = 3
   failed_history_limit      = 5
 }
 ```
 
-## `asset` — file bundles declarativos
+## `asset` — declarative file bundles
 
-Materializa arquivos no host pra serem montados:
+Materialise files on the host so other resources can mount them:
 
 ```hcl
 asset "data" "redis-config" {
-  configuration = file("./configs/redis.conf")   # local, lido no apply
-  acl_users     = url("https://r2.example.com/acl")  # remoto, fetched pelo server
-  motd          = "Welcome to redis"             # literal
+  configuration = file("./configs/redis.conf")        # local, read at apply time
+  acl_users     = url("https://r2.example.com/acl")   # remote, fetched server-side
+  motd          = "Welcome to redis"                  # inline literal
 }
 
 statefulset "data" "cache" {
@@ -247,16 +248,16 @@ statefulset "data" "cache" {
 }
 ```
 
-**Scoped** (`asset "scope" "name"`): ref de 4 segmentos `${asset.scope.name.key}`.
-**Unscoped** (`asset "name"`): ref de 3 segmentos `${asset.name.key}` — pra CA bundles compartilhados, etc.
+- **Scoped** (`asset "scope" "name"`): four-segment ref `${asset.scope.name.key}`.
+- **Unscoped** (`asset "name"`): three-segment ref `${asset.name.key}` — handy for shared bytes (CA bundles, common ACLs).
 
-Edita o arquivo local → re-apply → hash do asset muda → rolling restart automático.
+Edit the local file → re-apply → asset hash changes → automatic rolling restart.
 
-## Macros (postgres, redis, mongo) — plugins
+## Macros (postgres, redis, mongo) — plugin-provided
 
 ```hcl
 postgres "data" "pg" {
-  plugin { version = "0.2.0" }      # ou "latest"
+  plugin { version = "0.2.0" }      # or "latest"
   image  = "postgres:15-alpine"
 }
 
@@ -266,11 +267,11 @@ redis "data" "cache" {
 }
 ```
 
-Expande server-side em `statefulset`. Defaults vêm do plugin; tudo declarado vence.
+Server-side expansion into a `statefulset`. Plugin fills defaults; anything you declare wins.
 
-## Variáveis interpoladas
+## Interpolation
 
-- `${VAR}` ou `${VAR:-default}` — env do shell (resolvido na CLI).
-- `${asset.scope.name.key}` — bind mount do asset.
-- `file("./path")` — lê do CWD da CLI.
-- `url("https://...")` — fetched pelo controller, cached por ETag.
+- `${VAR}` or `${VAR:-default}` — shell env (resolved CLI-side).
+- `${asset.scope.name.key}` — asset bind mount path.
+- `file("./path")` — read at apply time, relative to the CLI's CWD.
+- `url("https://...")` — fetched server-side, cached by ETag.

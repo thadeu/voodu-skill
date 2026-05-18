@@ -1,80 +1,80 @@
 # Plugins
 
-Plugins são binários independentes em `/opt/voodu/plugins`. Adicionam macros (`postgres`, `redis`, …) ou serviços (ingress).
+Plugins are standalone binaries under `/opt/voodu/plugins`. They add macros (`postgres`, `redis`, ...) or services (ingress).
 
-## Plugins oficiais
+## Official plugins
 
-| Repo | Pra que | Macro |
+| Repo | Purpose | Macro |
 |---|---|---|
-| `thadeu/voodu-caddy` | Ingress + TLS (Let's Encrypt, wildcard) | reconcilia `ingress` |
-| `thadeu/voodu-postgres` | Postgres com backup/replica/promote | `postgres` |
-| `thadeu/voodu-redis` | Redis com Sentinel HA | `redis` |
+| `thadeu/voodu-caddy` | Ingress + TLS (Let's Encrypt, wildcard) | reconciles `ingress` |
+| `thadeu/voodu-postgres` | Postgres with backup, replica, promote | `postgres` |
+| `thadeu/voodu-redis` | Redis with Sentinel HA | `redis` |
 | `thadeu/voodu-mongo` | MongoDB | `mongo` |
 
-## Comandos
+## Commands
 
 ```sh
-vd plugins:install thadeu/voodu-caddy        # do GitHub
+vd plugins:install thadeu/voodu-caddy        # from GitHub
 vd plugins:install thadeu/voodu-postgres
 vd plugins:list
-vd plugins:update                            # todos
-vd plugins:update voodu-postgres             # 1 só
+vd plugins:update                            # all installed
+vd plugins:update voodu-postgres             # one
 vd plugins:remove voodu-mongo
 ```
 
-## Versão pelo HCL
+## Version control from HCL
 
-Cada macro aceita `plugin { ... }`:
+Every macro accepts a `plugin { ... }` block:
 
 ```hcl
 postgres "data" "pg" {
   plugin {
-    version = "0.2.0"               # tag específica, reinstall se mismatch
-    # version = "latest"            # sempre re-fetch default branch
+    version = "0.2.0"               # specific tag; reinstall on mismatch
+    # version = "latest"            # always re-fetch the default branch
     # repo = "myorg/voodu-postgres-fork"   # fork override
   }
   image = "postgres:15-alpine"
 }
 ```
 
-Bloco omitido = usa o que está instalado, sem network roundtrip.
+Block omitted = use whatever's installed locally, no network roundtrip.
 
-## Aliases de comando
+## Command aliases
 
-Plugins podem declarar aliases:
+Plugins can declare aliases:
 
 ```sh
-vd pg:psql                # ≡ vd postgres:psql
+vd pg:psql                # same as `vd postgres:psql`
 vd pg:create main
-vd pg:promote --replica 1 # promove pg-1 a primary
+vd pg:promote --replica 1 # promote pg-1 to primary
 ```
 
-## Postgres — comandos comuns (plugin)
+## Postgres — common commands (plugin)
 
 ```sh
-vd pg:create main                    # cria nova database
+vd pg:create main                    # create a new database
 vd pg:list
-vd pg:psql main                      # shell psql interativo
+vd pg:psql main                      # interactive psql shell
 vd pg:backup main                    # snapshot
 vd pg:restore main backup-2026-01-01
-vd pg:promote --replica 1            # promover pg-1 a primary
-vd pg:failover                       # alias de promote
+vd pg:promote --replica 1            # promote pg-1 to primary
+vd pg:failover                       # alias of promote
 ```
 
-## Redis — comandos (plugin)
+## Redis — common commands (plugin)
 
 ```sh
-vd redis:cli                         # redis-cli interativo
+vd redis:cli                         # interactive redis-cli
 vd redis:failover                    # Sentinel-driven failover
 ```
 
-## Caddy / ingress — não tem CLI extra
+## Caddy / ingress — no extra CLI
 
-`voodu-caddy` é reativo: você declara `ingress { ... }` no HCL, controller reconcilia, Caddy gera config.
+`voodu-caddy` is purely reactive: declare `ingress { ... }` in HCL, the controller reconciles, Caddy generates the config.
 
-Pra ver o que Caddy aplicou:
+To inspect what Caddy applied:
 
 ```sh
 vd describe ingress clowk/api
-vd logs voodu-caddy                  # logs do reverse proxy
+vd logs voodu-caddy                  # reverse-proxy logs
 ```

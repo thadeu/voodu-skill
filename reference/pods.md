@@ -1,15 +1,15 @@
 # pods / logs / exec / run / restart / rollback
 
-## `vd get pods` — listar containers
+## `vd get pods` — list containers
 
 ```sh
-vd get pods                        # tudo
+vd get pods                        # everything
 vd get pods -s clowk-lp            # scope
-vd get pods clowk-lp/web           # 1 recurso (todas as réplicas)
-vd get pods -o json                # programático
+vd get pods clowk-lp/web           # single resource (all replicas)
+vd get pods -o json                # programmatic
 ```
 
-## `vd describe <kind> <ref>` — detalhe completo
+## `vd describe <kind> <ref>` — full detail
 
 ```sh
 vd describe deployment clowk-lp/web    # manifest + status + pods
@@ -17,86 +17,85 @@ vd describe statefulset data/pg
 vd describe ingress clowk-lp/web
 ```
 
-`vd get pod <ref>` é alias de `vd describe pod`.
+`vd get pod <ref>` is an alias for `vd describe pod`.
 
-## `vd logs` — stream de logs
+## `vd logs` — stream container logs
 
 ```sh
-vd logs clowk-lp/web                   # todas réplicas, modo follow
+vd logs clowk-lp/web                   # all replicas, follow mode
 vd logs clowk-lp/web -f                # explicit follow
-vd logs clowk-lp/web --tail 100        # últimas 100 linhas
-vd logs clowk-lp -f                    # scope inteiro (multiplex)
-vd logs clowk-lp-web.abc123            # 1 container específico
+vd logs clowk-lp/web --tail 100        # last 100 lines
+vd logs clowk-lp -f                    # entire scope (multiplexed)
+vd logs clowk-lp-web.abc123            # single container
 ```
 
-stdout e stderr vêm mergeados (foi feature recente).
+stdout and stderr are merged.
 
-## `vd exec` — entrar no container
+## `vd exec` — shell into a container
 
 ```sh
 vd exec clowk-lp/web -- bash           # auto-pick best replica
 vd exec clowk-lp/web -- ls -la /app
-vd exec clowk-lp-web.abc123 -- sh      # container específico
+vd exec clowk-lp-web.abc123 -- sh      # specific container
 ```
 
-Sem flags, voodu auto-detecta TTY/stdin. Pra workdir/user específicos, flags equivalentes ao `docker exec`.
+TTY/stdin auto-detect by default. Same flag surface as `docker exec` for workdir/user.
 
-## `vd run` — one-shot
+## `vd run` — one-shot verb
 
-Verbo unificado. 3 comportamentos pela forma do ref:
+Unified verb. Three behaviours, picked by ref shape:
 
 ```sh
-# 1. Job declarado → trigger único
+# 1. Declared job → trigger once
 vd run clowk-lp/migrate
 
-# 2. Cronjob declarado → force-tick (ignora schedule)
+# 2. Declared cronjob → force-tick (bypass schedule)
 vd run clowk-lp/nightly-backup
 
-# 3. Deployment + command → exec one-shot
+# 3. Deployment + command → one-shot exec into a fresh container
 vd run clowk-lp/web -- rails db:migrate
 vd run clowk-lp/web -- rake clean
 ```
 
-Sem command, só funciona em `job` ou `cronjob` (recursos com "trigger me once").
+Without a command, `vd run` only works on a `job` or `cronjob` (the kinds that have a "trigger me once" meaning).
 
-Diferença prática:
-- `vd exec` — entra num container vivo (mesma máquina existente).
-- `vd run` (com cmd) — spawn um container fresh com o spec do recurso.
+Quick distinctions:
+- `vd exec` — enter an already-running container.
+- `vd run <ref> -- cmd` — spawn a fresh container from the resource spec.
 - `vd apply` — desired state.
 
 ## `vd restart` — rolling restart
 
 ```sh
-vd restart clowk-lp/web                # deployment ou statefulset
+vd restart clowk-lp/web                # deployment or statefulset
 ```
 
-Não muda manifesto, só recria containers.
-Útil pra pegar nova versão duma imagem com tag mutável (`:latest`), recarregar env, etc.
+Doesn't change the manifest, just recreates containers. Useful for picking up a new `:latest`, reloading env, etc.
 
 ## `vd stop` / `vd start`
 
 ```sh
-vd stop clowk-lp/web                   # todas réplicas
-vd stop clowk-lp/web.0                 # só ordinal 0 (statefulset)
-vd start clowk-lp/web                  # destrava + recria
+vd stop clowk-lp/web                   # all replicas
+vd stop clowk-lp/web.0                 # just ordinal 0 (statefulset)
+vd start clowk-lp/web                  # clear freeze + recreate
 ```
 
-`stop` marca o recurso como freezed — re-apply não recria. `start` libera.
+`stop` freezes the resource — a re-apply won't recreate it. `start` releases the freeze.
 
-## `vd rollback` — voltar release
+## `vd rollback` — revert to a past release
 
 ```sh
-vd rollback clowk-lp/web               # release anterior
-vd rollback clowk-lp/web release-42    # release específico
+vd rollback clowk-lp/web               # previous release
+vd rollback clowk-lp/web release-42    # specific release
 ```
 
-Re-aplica snapshot da spec dum release passado. Histórico é mantido até `keep_releases` (default ~10).
+Re-applies a past release's spec snapshot. History is retained up to `keep_releases` (default ~10).
 
-## `vd release` — re-disparar release phase
+## `vd release` — re-trigger the release phase
 
 ```sh
-vd release clowk-lp/web                # roda release_command de novo
-vd release clowk-lp/web list           # lista releases
+vd release clowk-lp/web                # re-run release_command
+vd release clowk-lp/web list           # list releases
 ```
 
-Útil quando o `release { command = ... }` falhou e você quer re-rodar sem novo deploy.
+Useful when `release { command = ... }` failed and you want to re-run it without a fresh deploy.

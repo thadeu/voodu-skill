@@ -1,48 +1,49 @@
 # apply / diff / delete
 
-## `vd apply` — aplicar manifesto
+## `vd apply` — apply a manifest
 
 ```sh
-vd apply -f voodu.hcl                # arquivo único
-vd apply -f deployments.hcl -f ingresses.hcl   # múltiplos -f
-vd apply -f ./manifests/             # diretório (todos .hcl/.voodu/.yml)
-vd apply -f web                      # resolve web.voodu, web.hcl, web.yml…
-vd apply -f voodu.hcl -r prod        # ship pra remote "prod"
+vd apply -f voodu.hcl                          # single file
+vd apply -f deployments.hcl -f ingresses.hcl   # multiple -f
+vd apply -f ./manifests/                       # directory (every .hcl/.voodu/.yml)
+vd apply -f web                                # bare name resolves web.voodu/.hcl/.yml/...
+vd apply -f voodu.hcl -r prod                  # ship to remote "prod"
 ```
 
-### Flags principais
+### Main flags
 
-| Flag | Pra que |
+| Flag | What it does |
 |---|---|
-| `-f <arq\|dir>` | Manifesto(s). Repetível. |
-| `-r <remote>` | Remote SSH (default: git remote `voodu`). |
-| `--prune` | **Opt-in**. Apaga recursos do mesmo `(scope, kind)` que sumiram do manifesto. |
-| `-o json` | Saída em JSON. |
+| `-f <file\|dir>` | Manifest(s). Repeatable. |
+| `-r <remote>` | SSH remote (defaults to the `voodu` git remote). |
+| `--prune` | **Opt-in.** Delete resources in the same `(scope, kind)` that aren't in this apply. |
+| `-o json` | JSON output. |
 
 ### Default: upsert-only
 
-Sem `--prune`, o `apply` só **adiciona ou atualiza** recursos — nunca apaga. Pra apagar declaradamente, pede `--prune`:
+Without `--prune`, `apply` only adds/updates resources — it never deletes. To prune declaratively, opt in:
 
 ```sh
 vd apply -f voodu.hcl --prune
 ```
 
-Aí vira **fonte da verdade** por `(scope, kind)`:
+That turns the apply into a **source-of-truth** statement scoped to each `(scope, kind)` pair:
 
 ```
-Manifesto tem: deployment "clowk" "web"
-Controller tem: deployment "clowk" "web" + deployment "clowk" "old"
-vd apply --prune → "old" é apagado.
-vd apply         → "old" continua vivo.
+Manifest has:  deployment "clowk" "web"
+Controller:    deployment "clowk" "web" + deployment "clowk" "old"
+
+vd apply --prune  → "old" is deleted.
+vd apply          → "old" stays.
 ```
 
-Outros kinds (ingress, statefulset) no mesmo scope ficam intactos — prune é por par `(scope, kind)`.
+Other kinds (ingress, statefulset) in the same scope are untouched — prune is per `(scope, kind)`.
 
-> Em CI, fluxo comum: `vd diff --prune` no PR pra mostrar o que sumiria; `vd apply --prune` no merge.
+> Common CI flow: `vd diff --prune` on the PR to surface what would disappear; `vd apply --prune` on merge.
 
-### Variáveis de ambiente no manifesto
+### Variable interpolation in manifests
 
-Interpolação `${VAR}` e `${VAR:-default}` é resolvida na **sua máquina**, antes do tarball subir:
+`${VAR}` and `${VAR:-default}` are resolved **on your machine** before the tarball ships:
 
 ```hcl
 deployment "clowk-lp" "web" {
@@ -58,37 +59,38 @@ IMAGE_TAG=v1.4.2 vd apply -f voodu.hcl -r prod
 
 ```sh
 vd diff -f voodu.hcl
-vd diff -f voodu.hcl --detailed-exitcode    # CI: 0=clean, 1=err, 2=changes
+vd diff -f voodu.hcl --detailed-exitcode    # CI: 0=clean, 1=err, 2=changes pending
 ```
 
-Saída mostra:
-- `~ kind/scope/name` → vai mudar (cada linha = 1 campo)
-- `+ kind/scope/name (new)` → criar
-- `= kind/scope/name (unchanged)` → igual
-- `--- Would prune ---` → será apagado
+Markers in the output:
 
-## `vd delete` — apagar recursos
+- `~ kind/scope/name` — exists, spec would change (one line per differing field)
+- `+ kind/scope/name (new)` — would be created
+- `= kind/scope/name (unchanged)` — already in sync
+- `--- Would prune ---` — would be deleted (only shown with `--prune`)
 
-5 formas (em ordem de uso comum):
+## `vd delete` — remove resources
+
+Five shapes, in order of how often you'll reach for them:
 
 ```sh
-vd delete -f voodu.hcl                       # apaga tudo do manifesto
-vd delete clowk-lp/web                       # 1 recurso (auto-resolve kind)
-vd delete deployment/clowk-lp/web            # 1 recurso, kind explícito
-vd delete clowk-lp                           # scope inteiro
-vd delete statefulset/data/pg.0              # só o pod ordinal 0
+vd delete -f voodu.hcl                       # everything declared in the manifest
+vd delete clowk-lp/web                       # one resource (auto-resolves kind)
+vd delete deployment/clowk-lp/web            # one resource, explicit kind
+vd delete clowk-lp                           # entire scope
+vd delete statefulset/data/pg.0              # single pod by ordinal
 ```
 
-Pra statefulsets, `--prune` apaga **também os volumes**:
+For statefulsets, `--prune` also wipes the underlying volumes:
 
 ```sh
 vd delete statefulset/data/pg --prune
 ```
 
-Sem `--prune`, volumes ficam — você pode recriar depois mantendo os dados.
+Without `--prune`, volumes stay — you can recreate the pod later and the data is still there.
 
-## Formato de arquivo
+## File extensions
 
-Tudo é HCL (ou YAML com mesmo schema). Extensões aceitas: `.hcl`, `.voodu`, `.vdu`, `.vd`, `.yml`, `.yaml`.
+All of these parse as HCL (or YAML with the same schema). Accepted: `.hcl`, `.voodu`, `.vdu`, `.vd`, `.yml`, `.yaml`.
 
-`vd apply -f web` resolve bare names contra essas extensões em ordem.
+`vd apply -f web` resolves bare names against these extensions in order.
