@@ -72,6 +72,53 @@ cronjob "clowk" "s3-backup" {
 }
 ```
 
+### `env_from` feeds parse-time `${VAR}` interpolation
+
+`env_from` does TWO things — operator typically only thinks of (1) but (2) is often what makes a manifest work for an entire team:
+
+1. **Runtime env file:** the controller stacks the bucket's KV pairs under the resource's own env via `--env-file`. The container reads them at boot.
+2. **Parse-time `${VAR}` substitution:** the CLI fetches the bucket from the controller BEFORE parsing the manifest and layers its values into the `${VAR}` interpolation context. So `${SLACK_WEBHOOK_URL}` in `on_deploy.success.url` resolves from the bucket — no per-dev `export` needed.
+
+```sh
+# Set once on the controller:
+vd config set -s prod -n shared \
+  SLACK_WEBHOOK_URL="https://hooks.slack.com/..." \
+  PD_ROUTING_KEY="R000..." \
+  DATABASE_URL="postgres://..."
+```
+
+```hcl
+deployment "prod" "api" {
+  env_from = ["prod/shared"]                # bucket fed into ${VAR} at parse-time
+
+  image = "ghcr.io/acme/api:1.4"
+
+  env = {
+    DATABASE_URL = "${DATABASE_URL}"        # resolves from prod/shared
+  }
+
+  on_deploy {
+    success { url = "${SLACK_WEBHOOK_URL}" }   # ditto
+
+    failure {
+      url     = "https://events.pagerduty.com/v2/enqueue"
+      headers = { "X-Routing-Key" = "${PD_ROUTING_KEY}" }
+    }
+  }
+}
+```
+
+Every dev on the team applies without exporting anything locally. Rotation = one `vd config set` — propagates to every dev's next `vd apply`.
+
+**Precedence (later wins, mirrors runtime env_from layering):**
+
+1. env_from'd bucket vars, in declared order (later refs override earlier on the same key).
+2. Operator's shell env wins over the bucket on collision — allows ad-hoc override for testing: `SLACK_WEBHOOK_URL=https://test/h vd apply ...`.
+
+**Caveat:** the parse-time bucket lookup runs for **local applies only**. With `-r <remote>` the SSH-forward path keeps shell-only interpolation — use direnv / shell exports for remote applies.
+
+**Exception:** the `registry` kind does NOT accept `env_from`. The one-credential-per-host constraint (`~/.docker/config.json` is singular) means a bucket wouldn't solve the underlying problem; use a service-account token via `.envrc` instead. See [reference/manifests.md](manifests.md#registry).
+
 ### Reload — apply new env without re-applying the manifest
 
 ```sh

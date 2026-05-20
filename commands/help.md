@@ -22,6 +22,7 @@ Display the following cheat sheet to the user, verbatim, as markdown.
 | `/vd:release` | Re-trigger the release phase |
 | `/vd:describe` | Full state for a resource (manifest + status + pods) |
 | `/vd:get` | List pods or other resources |
+| `/vd:stats` | Live CPU/memory usage joined with configured limits |
 | `/vd:remote` | SSH remotes for multi-server deploys |
 | `/vd:plugins` | Install / list / update plugins |
 | `/vd:manifests` | Every HCL kind (deployment, ingress, statefulset, ...) |

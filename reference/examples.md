@@ -223,8 +223,11 @@ asset "data" "pg-config" {
 }
 
 postgres "data" "pg" {
-  plugin { version = "0.2.0" }
+  plugin { version = "0.13.0" }
   image = "postgres:15-alpine"
+
+  # Default probes (tcp_socket liveness + pg_isready readiness)
+  # ship for free; only declare `probes { }` here if overriding.
 
   command = [
     "postgres",
@@ -239,8 +242,10 @@ postgres "data" "pg" {
 }
 
 redis "data" "cache" {
-  plugin { version = "latest" }
+  plugin { version = "0.14.0" }
   image  = "redis:8"
+  # Default probes (tcp_socket liveness + redis-cli ping readiness)
+  # ship for free.
 }
 
 app "myapp" "web" {
@@ -248,10 +253,37 @@ app "myapp" "web" {
   replicas = 3
   ports    = ["8080"]
 
+  env_from = ["myapp/shared"]              # DATABASE_URL / REDIS_URL / SLACK_WEBHOOK_URL come from here
+
   env = { PORT = "8080" NODE_ENV = "production" }
 
-  health_check = "/healthz"
-  host         = "myapp.example.com"
+  init "migrate" {
+    command = ["bin/rails", "db:migrate"]
+    timeout = "10m"
+  }
+
+  probes {
+    startup   { http_get { path = "/health" port = 8080 } period = "2s"  failure_threshold = 30 }
+    liveness  { http_get { path = "/health" port = 8080 } period = "10s" failure_threshold = 3 }
+    readiness { http_get { path = "/ready"  port = 8080 } period = "5s"  failure_threshold = 1 success_threshold = 2 }
+  }
+
+  autoscale {
+    min        = 3
+    max        = 15
+    cpu_target = 60
+    cooldown_down = "10m"
+  }
+
+  on_deploy {
+    success { url = "${SLACK_WEBHOOK_URL}" }
+    failure {
+      url     = "${SLACK_WEBHOOK_URL}"
+      headers = { "X-Voodu-Source" = "rollout" }
+    }
+  }
+
+  host = "myapp.example.com"
 
   tls {
     email = "ops@example.com"
@@ -260,12 +292,89 @@ app "myapp" "web" {
 ```
 
 ```sh
-# One-time setup:
+# One-time setup: bucket holds EVERY ${VAR} the manifest references.
+# env_from = ["myapp/shared"] feeds these into BOTH parse-time
+# interpolation AND container runtime env.
 PG_PASS=$(openssl rand -hex 16)
-vd config data/pg set POSTGRES_PASSWORD=$PG_PASS
-vd config myapp/web set \
+vd config set -s data -n pg POSTGRES_PASSWORD=$PG_PASS
+
+vd config set -s myapp -n shared \
   DATABASE_URL="postgres://postgres:$PG_PASS@pg-0.data:5432/myapp" \
-  REDIS_URL="redis://cache-0.data:6379/0"
+  REDIS_URL="redis://cache-0.data:6379/0" \
+  SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../XXXX"
 
 vd apply -f voodu.hcl
 ```
+
+## Private registry + app
+
+```hcl
+# voodu.hcl
+registry "ghcr" {
+  url      = "ghcr.io"
+  username = "${GHCR_USER}"
+  token    = "${GHCR_TOKEN}"
+}
+
+deployment "prod" "api" {
+  image    = "ghcr.io/acme/private-api:1.4"
+  replicas = 2
+  ports    = ["3000"]
+}
+```
+
+```sh
+# IMPORTANT: registry secrets do NOT support env_from (one-credential-
+# per-host constraint). Use a service-account / bot token distributed
+# via gitignored .envrc + direnv (or password manager):
+#
+#   # .envrc (gitignored)
+#   export GHCR_USER="acme-deploy-bot"
+#   export GHCR_TOKEN="ghp_REPLACE_WITH_BOT_PAT"
+#
+# Per-dev personal PATs trample each other on the host.
+
+vd apply -f voodu.hcl
+```
+
+## On-deploy webhook with rich body (PagerDuty Events v2)
+
+For receivers that need a specific JSON schema (PagerDuty, Datadog, Slack Block Kit), use an asset-backed body template:
+
+```hcl
+# webhooks/pagerduty-event.json (committed in your repo):
+# {
+#   "routing_key": "${PD_ROUTING_KEY}",
+#   "event_action": "trigger",
+#   "payload": {
+#     "summary": "voodu rollout failed: {{scope}}/{{name}}",
+#     "source": "{{scope}}/{{name}}",
+#     "severity": "error",
+#     "custom_details": {
+#       "release_id": "{{release_id}}",
+#       "image": "{{image}}",
+#       "error": "{{error}}"
+#     }
+#   }
+# }
+
+asset "prod" "webhooks" {
+  pagerduty_event = file("./webhooks/pagerduty-event.json")
+}
+
+deployment "prod" "api" {
+  image    = "ghcr.io/acme/api:1.4"
+  env_from = ["prod/shared"]
+
+  on_deploy {
+    success { url = "${SLACK_WEBHOOK_URL}" }
+
+    failure {
+      url  = "https://events.pagerduty.com/v2/enqueue"
+      file = "${asset.prod.webhooks.pagerduty_event}"
+    }
+  }
+}
+```
+
+`${PD_ROUTING_KEY}` is substituted parse-time (from `prod/shared` bucket). `{{name}}`, `{{error}}`, etc. are substituted fire-time on the controller with the live release data.

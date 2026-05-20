@@ -5,8 +5,8 @@
 ```sh
 vd apply -f voodu.hcl                          # single file
 vd apply -f deployments.hcl -f ingresses.hcl   # multiple -f
-vd apply -f ./manifests/                       # directory (every .hcl/.voodu/.yml)
-vd apply -f web                                # bare name resolves web.voodu/.hcl/.yml/...
+vd apply -f ./manifests/                       # directory (every .hcl/.voodu/.vdu/.vd)
+vd apply -f web                                # bare name resolves web.voodu/.hcl/.vdu/.vd
 vd apply -f voodu.hcl -r prod                  # ship to remote "prod"
 ```
 
@@ -43,17 +43,33 @@ Other kinds (ingress, statefulset) in the same scope are untouched — prune is 
 
 ### Variable interpolation in manifests
 
-`${VAR}` and `${VAR:-default}` are resolved **on your machine** before the tarball ships:
+`${VAR}` and `${VAR:-default}` are resolved **on your machine** before the tarball ships. The interpolation context combines:
+
+1. The operator's shell env (`os.Environ()`).
+2. Any `env_from`'d config bucket the resource declares — the CLI fetches the bucket from the controller before parsing, so `${SLACK_WEBHOOK_URL}` in `on_deploy.success.url` can come from `vd config set -s prod -n shared SLACK_WEBHOOK_URL=...`.
+
+Shell wins over bucket on collision (ad-hoc override for testing: `SLACK_WEBHOOK_URL=https://test/h vd apply ...`).
 
 ```hcl
 deployment "clowk-lp" "web" {
+  env_from = ["clowk-lp/shared"]              # bucket lookup at parse-time
+
   image = "ghcr.io/clowk/lp:${IMAGE_TAG:-latest}"
+
+  on_deploy {
+    success {
+      url = "${SLACK_WEBHOOK_URL}"            # resolved from clowk-lp/shared
+    }
+  }
 }
 ```
 
 ```sh
+vd config set -s clowk-lp -n shared SLACK_WEBHOOK_URL="https://hooks.slack.com/..."
 IMAGE_TAG=v1.4.2 vd apply -f voodu.hcl -r prod
 ```
+
+**Caveat:** the parse-time bucket lookup runs for **local applies only** (no `-r`). With `-r <remote>`, the SSH-forward path keeps shell-only interpolation — fall back to direnv / shell exports there.
 
 ## `vd diff` — preview
 
@@ -91,6 +107,6 @@ Without `--prune`, volumes stay — you can recreate the pod later and the data 
 
 ## File extensions
 
-All of these parse as HCL (or YAML with the same schema). Accepted: `.hcl`, `.voodu`, `.vdu`, `.vd`, `.yml`, `.yaml`.
+All accepted extensions parse as HCL: `.hcl`, `.voodu`, `.vdu`, `.vd`. YAML input was removed in beta — see [reference/manifests.md](manifests.md) for why HCL became the only input format.
 
 `vd apply -f web` resolves bare names against these extensions in order.

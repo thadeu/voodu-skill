@@ -9,8 +9,8 @@ Display the following cheat sheet to the user, verbatim, as markdown.
 ```sh
 vd apply -f voodu.hcl                          # single file
 vd apply -f deployments.hcl -f ingresses.hcl   # multiple -f
-vd apply -f ./manifests/                       # directory (every .hcl/.voodu/.yml)
-vd apply -f web                                # bare name resolves web.voodu/.hcl/.yml/...
+vd apply -f ./manifests/                       # directory (every .hcl/.voodu/.vdu/.vd)
+vd apply -f web                                # bare name resolves web.voodu/.hcl/.vdu/.vd
 vd apply -f voodu.hcl -r prod                  # ship to remote "prod"
 ```
 
@@ -35,11 +35,20 @@ Prune is per `(scope, kind)`. Other kinds in the same scope stay untouched.
 
 ## Variable interpolation
 
-`${VAR}` and `${VAR:-default}` are resolved on **your machine** before the tarball ships.
+`${VAR}` and `${VAR:-default}` are resolved on **your machine** before the tarball ships. The interpolation context includes:
+
+1. Your shell env (`os.Environ()`).
+2. `env_from`'d config buckets — the CLI fetches them before parsing, so `${SLACK_WEBHOOK_URL}` in `on_deploy.success.url` can come from `vd config set -s prod -n shared SLACK_WEBHOOK_URL=...`. Shell wins on collision (ad-hoc override).
 
 ```hcl
 deployment "clowk-lp" "web" {
+  env_from = ["clowk-lp/shared"]                # bucket → ${VAR} at parse time
+
   image = "ghcr.io/clowk/lp:${IMAGE_TAG:-latest}"
+
+  on_deploy {
+    success { url = "${SLACK_WEBHOOK_URL}" }    # from clowk-lp/shared
+  }
 }
 ```
 
@@ -47,9 +56,11 @@ deployment "clowk-lp" "web" {
 IMAGE_TAG=v1.4.2 vd apply -f voodu.hcl -r prod
 ```
 
+**Caveat:** bucket-fed interpolation is **local-apply only**. With `-r <remote>` the SSH-forward path keeps shell-only — use direnv / shell exports for remote applies.
+
 ## File extensions
 
-All parse as HCL (or YAML with the same schema): `.hcl`, `.voodu`, `.vdu`, `.vd`, `.yml`, `.yaml`.
+All parse as HCL: `.hcl`, `.voodu`, `.vdu`, `.vd`. YAML input was removed in beta — HCL is the only accepted format.
 
 ## Build-mode vs image-mode
 

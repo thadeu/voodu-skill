@@ -206,7 +206,114 @@ vd diff -f voodu.hcl --detailed-exitcode
 
 Fail the PR on drift, or gate the apply step behind an explicit "yes there are changes" signal.
 
-## 9. Persistent volumes — surviving delete
+## 9. Centralised secrets via `env_from` (bucket-fed `${VAR}`)
+
+Stop forcing every dev to maintain their own `.envrc` with the same webhook URLs / API tokens. Store the values once in a scope bucket; every dev's `vd apply` picks them up.
+
+```sh
+# operator (one time):
+vd config set -s prod -n shared \
+  SLACK_WEBHOOK_URL="https://hooks.slack.com/..." \
+  PD_ROUTING_KEY="R000..." \
+  HONEYCOMB_KEY="..."
+```
+
+```hcl
+deployment "prod" "api" {
+  env_from = ["prod/shared"]                # bucket → ${VAR} at parse time AND container runtime env
+
+  image = "ghcr.io/acme/api:1.4"
+
+  on_deploy {
+    success { url = "${SLACK_WEBHOOK_URL}" }   # resolves from prod/shared
+    failure {
+      url     = "https://events.pagerduty.com/v2/enqueue"
+      headers = { "X-Routing-Key" = "${PD_ROUTING_KEY}" }
+    }
+  }
+
+  env = { HONEYCOMB_API_KEY = "${HONEYCOMB_KEY}" }
+}
+```
+
+Every dev runs `vd apply` — values resolved server-side. Rotation = one `vd config set`, every next apply picks up the new value. Shell still wins for testing (`SLACK_WEBHOOK_URL=test vd apply ...`).
+
+**Caveat:** local-apply only. With `-r <remote>` the SSH-forward path keeps shell-only interpolation.
+
+## 10. Default probes from plugins (override partial)
+
+`postgres` and `redis` plugins ship sensible probe defaults out of the box (since postgres `v0.13.0`, redis `v0.14.0`). Bare `redis "data" "cache" {}` gets TCP liveness + `redis-cli ping` readiness automatically — no boilerplate.
+
+```hcl
+# All defaults: liveness on 6379 + redis-cli ping readiness
+redis "data" "cache" {}
+
+# Override — declaring ANY probes block REPLACES the default entirely
+# (no sub-block merging by design — see plugin README for rationale).
+redis "data" "cache" {
+  probes {
+    liveness {
+      http_get { path = "/metrics" port = 9121 }   # operator's choice
+    }
+
+    # Must redeclare readiness if you want to keep it:
+    readiness {
+      exec { command = ["redis-cli", "ping"] }
+      period            = "5s"
+      success_threshold = 2
+    }
+  }
+}
+
+# Disable probes entirely:
+redis "data" "cache" {
+  probes {}                              # empty block runs nothing
+}
+```
+
+Same shape for `postgres` (TCP liveness on `spec.Port`, `pg_isready -U <user> -d <db>` readiness, all spec-substituted).
+
+**Upgrade note:** the first `vd apply` after upgrading to a plugin version that ships defaults will flip the spec hash (probes fold into the statefulset hash on voodu core), triggering one rolling restart. Per-pod data survives via volume claims.
+
+## 11. Probe-driven ingress gating (zero config)
+
+When a deployment declares an HTTP readiness probe AND an ingress, voodu automatically points caddy's active health check at the readiness path. The two gates (controller's probe runner + caddy active probe) hit the SAME endpoint — one declaration drives both.
+
+```hcl
+deployment "prod" "api" {
+  image = "ghcr.io/acme/api:1.4"
+  ports = ["3000"]
+
+  probes {
+    readiness {
+      http_get { path = "/ready" port = 3000 }
+      period            = "5s"
+      failure_threshold = 1
+      success_threshold = 2
+    }
+  }
+}
+
+ingress "prod" "api" {
+  service = "api"
+  host    = "api.example.com"
+  tls { email = "ops@example.com" }
+  # NO `health_check =` / `lb { interval = }` needed —
+  # voodu derives both from the readiness probe block.
+}
+```
+
+Failing /ready → caddy bypasses the upstream → traffic routes to healthy peers automatically. `vd describe deployment prod/api` shows the per-replica readiness state:
+
+```
+readiness:
+  prod-api.a3f9   ready=true   phase=healthy
+  prod-api.b1c2   ready=false  phase=unhealthy  reason="GET /ready → 502"
+```
+
+For TCP / exec readiness (caddy can't probe non-HTTP), the legacy `health_check = "..."` field on the deployment is honoured as the caddy HC path; the controller's probe runner still operates independently.
+
+## 12. Persistent volumes — surviving delete
 
 ```hcl
 statefulset "data" "pg" {

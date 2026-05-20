@@ -99,3 +99,25 @@ vd release clowk-lp/web list           # list releases
 ```
 
 Useful when `release { command = ... }` failed and you want to re-run it without a fresh deploy.
+
+## `vd stats` — live CPU/memory usage
+
+`docker stats` analog scoped to voodu-managed pods, joined with the manifest's `resources.limits` so you see usage AND the configured ceiling in one shot.
+
+```sh
+vd stats                              # every running pod
+vd stats clowk-lp                     # bare scope filter
+vd stats clowk-lp/web                 # scope/name (all replicas)
+vd stats deployment                   # filter by kind
+vd stats deployment/clowk-lp/web      # explicit kind/scope/name
+vd stats --orphans                    # include legacy / leaked containers
+vd stats -o json | jq '.[] | select(.usage.memory_percent > 80)'
+```
+
+Columns: KIND, REF, CPU%, MEM USED, MEM LIMIT, MEM%, CPU LIMIT. The two LIMIT columns echo the operator's verbatim manifest strings ("254Mi", "0.4") — `—` means no `resources {}` declared. CPU% is host-relative (100% = one full core), matching `docker stats` semantics.
+
+Single-shot only — for refresh, wrap in `watch -n 2 vd stats clowk-lp`. Stopped pods are omitted (no cgroup to sample); use `vd get pods` to see them.
+
+Orphans (running containers without a matching manifest) are hidden by default — `--orphans` surfaces them with `(orphan)` in the KIND column. Useful for spotting leaks after a `vd delete` that didn't fully clean up.
+
+The Go types backing this surface (`controller.PodStats`, `StatsFilter`, `UsageStats`, `LimitStats`) live in `internal/controller/stats.go` and are reusable from a future SDK without re-implementing the join.
