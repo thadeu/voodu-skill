@@ -58,6 +58,7 @@ Once installed, open Claude Code in any project. Try:
 
 - `/vd:help` — index of every slash command
 - `/vd:apply` — apply / flags / examples
+- `/vd:procfile` — zero-HCL Procfile deploys + migrate from Heroku/Dokku/Kamal
 - `/vd:config` — env-var management
 - `/vd:logs`, `/vd:exec`, `/vd:run`, `/vd:restart` — runtime ops
 - `/vd:manifests` — every HCL kind

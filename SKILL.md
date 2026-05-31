@@ -1,6 +1,6 @@
 ---
 name: voodu
-description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / on_deploy webhooks, seeding secrets, or multi-server / shared-scope / build-mode setups.
+description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / on_deploy + on_probe webhooks, seeding secrets, or multi-server / shared-scope / build-mode setups.
 ---
 
 # voodu — cheat sheet
@@ -13,6 +13,7 @@ This skill is a quick-reference — no theory, just recipes.
 | I want to… | Command |
 |---|---|
 | Apply a manifest | `vd apply -f voodu.hcl` |
+| Deploy a Heroku/Dokku Procfile (zero HCL) | `vd apply -f Procfile` |
 | Preview changes | `vd diff -f voodu.hcl` |
 | Delete resources | `vd delete <scope>/<name>` |
 | List pods | `vd get pods` |
@@ -35,7 +36,7 @@ This skill is a quick-reference — no theory, just recipes.
 
 Each verb has a dedicated slash command — type `/vd:<verb>` for a focused cheat sheet:
 
-`/vd:help` `/vd:apply` `/vd:diff` `/vd:delete` `/vd:config` `/vd:logs` `/vd:exec` `/vd:run` `/vd:restart` `/vd:rollback` `/vd:release` `/vd:describe` `/vd:get` `/vd:stats` `/vd:remote` `/vd:plugins` `/vd:manifests` `/vd:patterns` `/vd:examples`
+`/vd:help` `/vd:apply` `/vd:diff` `/vd:delete` `/vd:config` `/vd:logs` `/vd:exec` `/vd:run` `/vd:restart` `/vd:rollback` `/vd:release` `/vd:describe` `/vd:get` `/vd:stats` `/vd:remote` `/vd:plugins` `/vd:procfile` `/vd:manifests` `/vd:patterns` `/vd:examples`
 
 ## Drilling deeper
 
@@ -45,6 +46,7 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 |---|---|
 | `apply`, `diff`, `delete`, prune | [reference/apply.md](reference/apply.md) |
 | HCL manifests — every kind | [reference/manifests.md](reference/manifests.md) |
+| Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
 | `config` (env vars, virtual buckets) | [reference/config.md](reference/config.md) |
 | `logs`, `exec`, `run`, `restart`, `rollback`, `describe`, `get`, `stats` | [reference/pods.md](reference/pods.md) |
 | Remotes (multi-server SSH) | [reference/remotes.md](reference/remotes.md) |
@@ -55,12 +57,14 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 ## Voodu fundamentals
 
 - **HCL is the only input format.** YAML input was removed in beta. Accepted extensions: `.hcl`, `.voodu`, `.vdu`, `.vd`. (`yaml:` struct tags remain only for `vd describe -o yaml` output formatting.)
+- **Procfile is the zero-HCL on-ramp.** `vd apply -f Procfile` reads a Heroku/Dokku-style `type: command` file and generates one `deployment` per line (a `job` for `release:`), auto-detects the language, and **builds once** (the processes share one source → one image, retagged per process). Routing/scope live in `.voodu/app.json` (commit it); `vd config <scope> set` is the `config:set` equivalent; `--eject` graduates the Procfile to HCL. Full reference + Kamal migration: [reference/procfile.md](reference/procfile.md).
 - **Default: upsert-only.** `vd apply` only creates/updates. To delete what disappeared from the manifest: `vd apply --prune` (opt-in, scoped by `(scope, kind)`).
 - **Secrets live outside the manifest.** Use `vd config set` — its values override `env {}` blocks in HCL.
 - **`scope` is a free-form grouping label.** Names are unique per scope. `deployment "clowk" "api"` is distinct from `deployment "prod" "api"`.
 - **Image-mode vs build-mode.** `image = "..."` and `build { ... }` are mutually exclusive (parse error if both). With `image`, the controller pulls from the registry. With `build { context = "..." }`, the CLI tarballs the working tree over SSH. Omitting both gives auto-detect at repo root. The `build {}` block is docker-compose-shaped (`context`, `dockerfile`, `args`, nested `lang {}`).
 - **`env_from = ["scope/name"]` does two things:** (1) at **runtime**, stacks the bucket's env file under the resource's own env (operator's `env {}` wins on collisions). (2) at **parse-time** (CLI-side), feeds the same bucket into `${VAR}` interpolation so manifests can reference secrets stored centrally on the controller. Shell env still wins over the bucket on collision — ad-hoc override works. Supported on `deployment`, `app`, `statefulset`, `job`, `cronjob`.
 - **Probes (kubelet-style).** `probes { liveness { ... } readiness { ... } startup { ... } }` on `deployment` / `app` / `statefulset`. Selectors: `http_get`, `tcp_socket`, `exec`. Liveness fails → docker restart. Readiness fails → upstream removed from caddy ingress automatically. Startup gates readiness until the first pass. See [reference/manifests.md](reference/manifests.md).
+- **Runtime-health webhooks (`on_probe`).** Sibling of `on_deploy` for live pod health. `on_probe { failure { url = "..." } recovery { url = "..." } }` fires when a probe transitions — Telegram / Slack / PagerDuty in parallel. Tokens: `{{pod}}`, `{{probe}}`, `{{transition}}`, `{{reason}}`, `{{transition_id}}` (deterministic dedup key). Suppressed during planned teardown (rolling restart, scale-down, `vd restart`). Works on `deployment`, `statefulset`, and plugin-expanded kinds (postgres, redis, mongo).
 - **Init containers.** `init "<name>" { command = [...] }` declares ordered one-shot prep steps that must exit 0 before the main container starts. Runs per-replica spawn; inherits env / volumes / networks / env_from from the parent.
 - **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the entire block to disable TLS. Override `provider = "internal"` for dev/staging self-signed.
 - **Ports are loopback-only by default.** `ports = ["8080"]` binds `127.0.0.1:8080`. Public exposure needs an explicit IP (`0.0.0.0:8080:8080`) — but the normal path is an `ingress`.
