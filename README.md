@@ -49,9 +49,12 @@ cd ~/code/voodu-skill && git pull
 
 ## What's in here
 
-- **`SKILL.md`** — entry point. Command map, voodu fundamentals, and links to the official
-  docs + `reference/`. Loaded automatically when you ask a voodu question.
-- **`reference/`** — deep-dive docs, pulled in when more context is needed.
+The skill lives in **`skills/voodu/`** (the standard layout — it lets `npx skills` bundle
+`SKILL.md` together with its `reference/` docs):
+
+- **`skills/voodu/SKILL.md`** — entry point. Command map, voodu fundamentals, and links to
+  the official docs + `reference/`. Loaded automatically when you ask a voodu question.
+- **`skills/voodu/reference/`** — deep-dive docs, pulled in when more context is needed.
   - **Authoring:** `manifests.md` (every HCL kind), `examples.md` (ready-to-paste), `patterns.md` (multi-env, shared-scope, build-mode, assets)
   - **CLI, one file per verb:** `apply.md`, `diff.md`, `delete.md`, `config.md`, `logs.md`, `exec.md`, `run.md`, `restart.md`, `rollback.md`, `release.md`, `describe.md`, `get.md`, `stats.md`, `remote.md`, `plugins.md`, `procfile.md`
 

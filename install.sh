@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # voodu-skill — installer
 #
-# Symlinks this repo into Claude Code's skill discovery path:
-#   ~/.claude/skills/voodu     → repo root
+# Symlinks the skill into Claude Code's skill discovery path:
+#   ~/.claude/skills/voodu     → skills/voodu
 #
 # Re-run safely: an existing symlink is replaced. A real file / directory
 # at that path aborts the script with a clear message.
@@ -12,6 +12,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_SRC="$REPO_DIR/skills/voodu"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SKILL_DIR="$CLAUDE_DIR/skills/voodu"
 
@@ -48,8 +49,8 @@ link() {
   log "linked $dst → $src"
 }
 
-log "installing from $REPO_DIR"
-link "$REPO_DIR" "$SKILL_DIR"
+log "installing from $SKILL_SRC"
+link "$SKILL_SRC" "$SKILL_DIR"
 
 cat <<EOF
 
