@@ -1,9 +1,3 @@
----
-description: vd delete — delete resources (file, scope, name, pod)
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd delete` — remove resources
 
 Five shapes, in order of how often you'll reach for them:

@@ -1,9 +1,3 @@
----
-description: vd release — inspect and re-trigger the release phase
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd release` — release phase
 
 The release phase is a manifest-declared command that runs **once per deploy** after the container starts but before traffic flips. Think Rails `db:migrate`, Django migrations, asset precompilation.

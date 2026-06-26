@@ -1,9 +1,3 @@
----
-description: vd describe — full state for a resource (manifest + status + pods)
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd describe` — full resource state
 
 ```sh

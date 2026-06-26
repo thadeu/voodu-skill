@@ -6,7 +6,14 @@ description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests
 # voodu — cheat sheet
 
 `vd` is an alias for the `voodu` binary (same command, shorter spelling).
-This skill is a quick-reference — no theory, just recipes.
+This skill is a quick-reference for authoring `.voodu` HCL manifests and answering
+voodu questions — no theory, just recipes. Drill into `reference/` for the full detail.
+
+## Official docs
+
+- **Full documentation:** https://voodu.clowk.in/docs/
+- **LLM reference (`llm.txt`):** https://voodu.clowk.in/llm.txt — fetch this for the
+  complete, authoritative, up-to-date surface when the recipes here aren't enough.
 
 ## Command map
 
@@ -32,27 +39,31 @@ This skill is a quick-reference — no theory, just recipes.
 | Apply to a remote | `vd apply -f voodu.hcl -r prod` |
 | Install a plugin | `vd plugins:install thadeu/voodu-caddy` |
 
-## Slash commands
-
-Each verb has a dedicated slash command — type `/vd:<verb>` for a focused cheat sheet:
-
-`/vd:help` `/vd:apply` `/vd:diff` `/vd:delete` `/vd:config` `/vd:logs` `/vd:exec` `/vd:run` `/vd:restart` `/vd:rollback` `/vd:release` `/vd:describe` `/vd:get` `/vd:stats` `/vd:remote` `/vd:plugins` `/vd:procfile` `/vd:manifests` `/vd:patterns` `/vd:examples`
-
 ## Drilling deeper
 
 When you need details (flags, manifest fields, end-to-end examples), open the matching file in `reference/`:
 
 | Topic | File |
 |---|---|
-| `apply`, `diff`, `delete`, prune | [reference/apply.md](reference/apply.md) |
 | HCL manifests — every kind | [reference/manifests.md](reference/manifests.md) |
-| Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
-| `config` (env vars, virtual buckets) | [reference/config.md](reference/config.md) |
-| `logs`, `exec`, `run`, `restart`, `rollback`, `describe`, `get`, `stats` | [reference/pods.md](reference/pods.md) |
-| Remotes (multi-server SSH) | [reference/remotes.md](reference/remotes.md) |
-| Plugins (caddy, postgres, redis, mongo) | [reference/plugins.md](reference/plugins.md) |
-| Patterns (multi-env, shared-scope, build-mode, assets) | [reference/patterns.md](reference/patterns.md) |
 | Ready-to-paste manifests | [reference/examples.md](reference/examples.md) |
+| Patterns (multi-env, shared-scope, build-mode, assets) | [reference/patterns.md](reference/patterns.md) |
+| `vd apply` (+ `--prune`) | [reference/apply.md](reference/apply.md) |
+| `vd diff` | [reference/diff.md](reference/diff.md) |
+| `vd delete` | [reference/delete.md](reference/delete.md) |
+| `vd config` (env vars, virtual buckets) | [reference/config.md](reference/config.md) |
+| `vd logs` | [reference/logs.md](reference/logs.md) |
+| `vd exec` | [reference/exec.md](reference/exec.md) |
+| `vd run` | [reference/run.md](reference/run.md) |
+| `vd restart` / `stop` / `start` | [reference/restart.md](reference/restart.md) |
+| `vd rollback` | [reference/rollback.md](reference/rollback.md) |
+| `vd release` | [reference/release.md](reference/release.md) |
+| `vd describe` | [reference/describe.md](reference/describe.md) |
+| `vd get` | [reference/get.md](reference/get.md) |
+| `vd stats` | [reference/stats.md](reference/stats.md) |
+| `vd remote` (multi-server SSH) | [reference/remote.md](reference/remote.md) |
+| `vd plugins` (caddy, postgres, redis, mongo) | [reference/plugins.md](reference/plugins.md) |
+| Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
 
 ## Voodu fundamentals
 

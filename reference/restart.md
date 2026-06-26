@@ -1,9 +1,3 @@
----
-description: vd restart / stop / start — runtime lifecycle without changing the manifest
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd restart` / `vd stop` / `vd start`
 
 ## Rolling restart

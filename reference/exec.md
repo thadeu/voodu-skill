@@ -1,9 +1,3 @@
----
-description: vd exec — shell into a running container
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd exec` — shell into a running container
 
 ```sh

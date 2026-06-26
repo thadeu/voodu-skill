@@ -1,9 +1,3 @@
----
-description: vd run — one-shot jobs / cronjobs / deployment commands
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd run` — one-shot verb
 
 Three behaviours, picked by ref shape:

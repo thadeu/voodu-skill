@@ -1,9 +1,3 @@
----
-description: vd get — list pods and other resources
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd get` — read-only listings
 
 ## Pods

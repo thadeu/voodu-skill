@@ -378,3 +378,24 @@ deployment "prod" "api" {
 ```
 
 `${PD_ROUTING_KEY}` is substituted parse-time (from `prod/shared` bucket). `{{name}}`, `{{error}}`, etc. are substituted fire-time on the controller with the live release data.
+
+
+## Raw docker pass-throughs (ulimits + docker_options)
+
+```hcl
+deployment "prod" "search" {
+  image = "ghcr.io/me/search:1.0"
+
+  ulimits = {
+    nofile  = "1048576:1048576"
+    memlock = "-1"
+  }
+
+  docker_options = [
+    "--shm-size=2g",
+    "--sysctl=net.core.somaxconn=4096",
+  ]
+}
+```
+
+Per-key override of platform-default ulimits (`nofile=65536:65536`, `nproc=4096:4096`); `docker_options` is a verbatim list-of-strings bypass appended to `docker run` before the image. Both available on every kind (deployment, statefulset, job, cronjob, app, per-init). Plugin blocks (postgres, redis, mongo, caddy) accept them at the HCL surface; whether the plugin forwards them is plugin-specific. Footgun: do not duplicate flags voodu already manages.

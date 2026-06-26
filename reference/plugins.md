@@ -19,7 +19,6 @@ vd plugins:install thadeu/voodu-postgres
 vd plugins:list
 vd plugins:update                            # all installed
 vd plugins:update voodu-postgres             # one
-vd plugins:remove voodu-mongo
 ```
 
 ## Version control from HCL

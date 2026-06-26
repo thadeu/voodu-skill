@@ -59,9 +59,9 @@ The tarball follows docker-build semantics: `.dockerignore` controls inclusion i
 
 ### Available fields
 
-Root: `image`, `replicas`, `command`, `env`, `env_file`, `env_from`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`.
+Root: `image`, `replicas`, `command`, `env`, `env_file`, `env_from`, `ports`, `volumes`, `network`, `networks`, `network_mode`, `restart`, `health_check`, `post_deploy`, `keep_releases`, `extra_hosts`, `cap_add`, `ulimits`, `docker_options`.
 
-Blocks: `build`, `release`, `depends_on`, `resources`, `logs`, `probes`, `autoscale`, `on_deploy`, `init "<name>"` (repeatable).
+Blocks: `build`, `release`, `depends_on`, `resources`, `logs`, `probes`, `autoscale`, `on_deploy`, `on_probe`, `init "<name>"` (repeatable).
 
 Inside `build { ... }`: `context`, `dockerfile`, `path`, `args`, plus nested `lang { name, version, entrypoint }`.
 
@@ -89,6 +89,39 @@ deployment "clowk" "api" {
   }
 }
 ```
+
+### Raw docker pass-throughs (`ulimits`, `docker_options`)
+
+Two escape hatches for shapes the typed surface doesn't model. Available on every container-spawning kind: `deployment`, `statefulset`, `job`, `cronjob`, `app`, and per-init under `init {}`. Plugin kinds (`postgres`, `redis`, `mongo`, `caddy`, …) accept the fields at the HCL surface (plugin blocks are schema-free); whether the plugin forwards them to the emitted deployment/statefulset depends on the plugin. If your plugin doesn't pass them through yet, drop down to plain `statefulset {}`.
+
+```hcl
+deployment "prod" "search" {
+  image = "ghcr.io/acme/search:1.0"
+
+  ulimits = {
+    nofile  = "1048576:1048576"   # overrides platform default 65536:65536
+    memlock = "-1"                 # new key (no platform default)
+    // nproc not declared → keeps platform default 4096:4096
+  }
+
+  docker_options = [
+    "--shm-size=2g",
+    "--sysctl=net.core.somaxconn=4096",
+    "--pids-limit=4096",
+    "--device=/dev/snd",
+  ]
+}
+```
+
+**`ulimits = {}`** — `map[string]string`. Each entry → one `--ulimit <key>=<value>` flag. Per-key override of voodu's platform defaults (`nofile=65536:65536`, `nproc=4096:4096`); keys the operator doesn't declare stay on the default. Values flow verbatim — docker accepts `"N"` and `"soft:hard"` shapes. No name validation.
+
+**`docker_options = []`** — `list(string)`. Each entry appended verbatim to `docker run` between voodu's managed flags and the image. No parsing, no validation. Use for `--shm-size`, `--pids-limit`, `--sysctl`, `--device`, `--privileged`, `--cap-drop`, `--read-only`, anything docker accepts.
+
+**Footgun:** do NOT redeclare flags voodu already manages — docker rejects duplicates at create time. Managed: `--name`, `--network`, `--restart`, `--env-file`, `--cpus`, `--memory`, `--ulimit`, `--label`, `--add-host`, `--cap-add`, `--log-opt`.
+
+**Hash semantics:** both fields fold into the deployment/statefulset spec hash, so editing either triggers a rolling restart (docker freezes the flags at create time and would otherwise silently keep the old values). Jobs/cronjobs read the spec fresh per run, no hash needed.
+
+**Inside `init {}`:** per-init `ulimits` / `docker_options` REPLACE the parent's at that init's docker-run (whole field replacement, not per-key merge).
 
 ### Release phase (pre/post deploy)
 
@@ -237,7 +270,11 @@ deployment "prod" "api" {
 
 ### Post-deploy webhooks (`on_deploy`)
 
-Best-effort notification webhooks invoked at the end of every rolling restart. Two sub-blocks (`success` / `failure`); declare either or both. Each carries `url` + optional `method` / `headers` / `body` (inline) / `file` (asset-backed template).
+Best-effort notification webhooks invoked at the end of every rolling restart. Two slots (`success` / `failure`); each slot accepts **zero, one, or many** target blocks. Each target carries `url` + optional `method` / `headers` / `body` (inline) / `file` (asset-backed template).
+
+Multiple blocks per slot fire in **parallel goroutines** with **independent retry budgets** — a slow PagerDuty doesn't delay Slack.
+
+Single target per slot — common case:
 
 ```hcl
 deployment "prod" "api" {
@@ -262,6 +299,32 @@ deployment "prod" "api" {
 }
 ```
 
+Multi-target fan-out — declare more blocks per slot:
+
+```hcl
+deployment "prod" "api" {
+  on_deploy {
+    # Success → Slack + Datadog + internal status bot
+    success { url = "${SLACK_WEBHOOK_URL}" }
+    success {
+      url     = "https://api.datadoghq.com/api/v1/events"
+      headers = { "DD-API-KEY" = "${DD_API_KEY}" }
+    }
+    success { url = "https://status.example.com/internal/deploys" }
+
+    # Failure → PagerDuty + OpsGenie (different on-call rotations)
+    failure {
+      url     = "https://events.pagerduty.com/v2/enqueue"
+      headers = { "X-Routing-Key" = "${PD_ROUTING_KEY}" }
+    }
+    failure {
+      url     = "https://api.opsgenie.com/v2/alerts"
+      headers = { "Authorization" = "GenieKey ${OPSGENIE_KEY}" }
+    }
+  }
+}
+```
+
 **Body shapes** (mutex):
 
 - `body = { ... }` — inline HCL object literal. For ≤ a few flat fields (e.g. Telegram bot `{chat_id, text, parse_mode}`).
@@ -279,7 +342,108 @@ Allowed `{{...}}`: `{{kind}}` `{{scope}}` `{{name}}` `{{release_id}}` `{{image}}
 
 **Headers:** operator's headers stack on top of voodu's default `Content-Type: application/json`. `User-Agent` is force-set to `voodu-deploy-webhook` — operator override is ignored (source-of-call debug signal).
 
-**Delivery contract:** 3 attempts, 1s/5s backoff, 10s per-attempt HTTP timeout. Failure to deliver does NOT fail the deploy — voodu logs and moves on. Not in the spec hash (rotating webhook URLs doesn't churn replicas).
+**Delivery contract:** best-effort, **per-target**. Each declared block fires in its own goroutine with its own 3 attempts (1s/5s/30s backoff, 10s per-attempt HTTP timeout). A failure on one target does NOT affect the others, and no target failure ever fails the deploy. Voodu logs drops with `target=<i>/<total>` identity when multiple targets exist. Not in the spec hash (rotating webhook URLs doesn't churn replicas).
+
+**Validation errors** include the index when multiple targets are declared (`on_deploy.failure[2].url is required`); single-target validation stays terse (`on_deploy.failure.url is required`).
+
+### Runtime-health webhooks (`on_probe`)
+
+Sibling of `on_deploy` — same shape, different vocabulary. Fires on **probe transitions** (liveness, readiness, startup), not on deploy completion. Two slots, both repeatable:
+
+- `failure` — any healthy → unhealthy edge from any of the three probes.
+- `recovery` — unhealthy → healthy, **only after a prior failure**.
+
+Works on `deployment`, `statefulset`, and plugin-expanded kinds (`postgres`, `redis`, `mongo`). The controller splices the operator's `on_probe` block through `plugin_expand` onto the resulting statefulset, so plugin authors don't have to teach their HCL surface about it.
+
+Common case — single Telegram bot for failures, silent recoveries:
+
+```hcl
+deployment "prod" "api" {
+  env_from = ["prod/notifications"]   # TG_TOKEN, TG_CHAT_ID
+
+  probes {
+    liveness  { http_get { path = "/healthz" } }
+    readiness { http_get { path = "/ready"   } }
+  }
+
+  on_probe {
+    failure {
+      url    = "https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+      method = "POST"
+
+      body = {
+        chat_id    = "${TG_CHAT_ID}"
+        text       = "🚨 *{{kind}}/{{scope}}/{{name}}* — *{{pod}}* {{probe}} failed: {{reason}}"
+        parse_mode = "Markdown"
+      }
+    }
+  }
+}
+```
+
+Multi-target fan-out — paging PagerDuty + dropping a Slack note:
+
+```hcl
+postgres "prod" "db" {
+  image    = "postgres:16"
+  replicas = 3
+
+  on_probe {
+    failure {
+      url     = "https://events.pagerduty.com/v2/enqueue"
+      headers = { "X-Routing-Key" = "${PD_KEY}" }
+
+      body = {
+        routing_key  = "${PD_KEY}"
+        event_action = "trigger"
+        dedup_key    = "{{transition_id}}"             # ← maps cleanly
+        payload = {
+          summary  = "{{pod}} {{probe}} failed"
+          severity = "error"
+          source   = "voodu"
+          custom_details = {
+            scope  = "{{scope}}"
+            reason = "{{reason}}"
+          }
+        }
+      }
+    }
+
+    failure  { url = "${SLACK_DB_CRITICAL}" }
+    recovery { url = "${SLACK_DB_INFO}" }
+  }
+}
+```
+
+**Tokens** (on_probe extends the on_deploy set):
+
+| token | meaning |
+|---|---|
+| `{{pod}}` | Full container name (e.g. `prod-api-2`, `data-pg-0`). |
+| `{{probe}}` | `liveness` \| `readiness` \| `startup`. |
+| `{{transition}}` | `failure` \| `recovery`. |
+| `{{reason}}` | Probe `Result.Reason` (`HTTP 503`, `exit code 1`, `connect: connection refused`). |
+| `{{transition_id}}` | 12-char sha256 prefix from `(scope, name, pod, probe, to_phase, timestamp_truncated_to_1s)` — deterministic, dedup-friendly. |
+| `{{timestamp}}` | RFC3339 wall-clock of the transition. |
+
+The original `{{kind}}`, `{{scope}}`, `{{name}}` tokens also resolve. `{{kind}}` is `deployment` for direct kinds and `statefulset` for plugin-expanded ones (postgres / redis / mongo all resolve to `statefulset`).
+
+**Recovery gating state machine.** A `recovery` event fires only when the same runner previously saw a `failure`. A freshly-started pod going healthy on its first sample does NOT fire recovery — that would spam every `vd apply`. After firing recovery, the gate resets: the next recovery requires another failure first. Pairs are clean.
+
+**Suppression during planned teardown.** Rolling restart, scale-down, and manual `vd restart` mark the per-runner `plannedTeardown` flag before stopping the probe runner. Any transition observed AFTER the flag is set is suppressed — operators don't get phantom failure alerts during graceful shutdowns.
+
+**Idempotency** belt-and-suspenders:
+
+- `{{transition_id}}` is deterministic from inputs (1-second time truncation). Receiver dedups on it.
+- In-firer 60s TTL cache drops same-id repeats on the controller side (defends against probe-event races during controller restart).
+
+**Best-effort delivery, per-target.** Same retry contract as `on_deploy`: 3 attempts, `[1s, 5s, 30s]` backoff, 10s per HTTP attempt, 2-min overall per goroutine. Failure to deliver never affects container state. NOT folded into the spec hash — URL rotation doesn't trigger a rolling restart.
+
+**Per-pod, not per-resource.** Each replica's transition fires its own webhook. A 5-replica deployment going down fires 5 `failure` events (one per pod). Receivers can aggregate on their side or use `{{transition_id}}` to dedupe.
+
+**Validation errors** include the on_probe block label so operators can locate the offending slot (`on_probe.failure[1].url is required`, `on_probe.recovery.method must be one of POST/PUT/PATCH/DELETE`).
+
+**Not on `job` / `cronjob`.** Those have completion semantics, not runtime-health probes. Use the workload's exit code for completion notifications.
 
 ### Logs (docker log driver cap)
 
@@ -516,7 +680,10 @@ Three different interpolation contexts, resolved at different stages:
 
 - **`${VAR}` or `${VAR:-default}`** — parse-time, CLI-side. Resolves from the operator's shell env **plus** any `env_from`'d config buckets the resource declares. Shell wins over bucket on collision (ad-hoc override). Works in any string field.
 - **`${asset.scope.name.key}` / `${asset.name.key}`** — apply-time, controller-side. Rewrites to the materialised host path of the asset. Used in volumes, body templates, etc.
-- **`{{field}}`** — fire-time, controller-side. Only inside `on_deploy` body templates (inline or file). Substitutes against the release context (`{{name}}`, `{{status}}`, `{{error}}`, `{{release_id}}`, `{{image}}`, `{{started_at}}`, `{{completed_at}}`, `{{kind}}`, `{{scope}}`).
+- **`{{field}}`** — fire-time, controller-side. Inside webhook body templates (inline `body = { ... }` or asset-backed `file = "${asset…}"`). Substitutes against the live context. Token set differs by hook:
+  - `on_deploy`: `{{name}}` `{{status}}` `{{error}}` `{{release_id}}` `{{image}}` `{{started_at}}` `{{completed_at}}` `{{kind}}` `{{scope}}`.
+  - `on_probe`: above (without release fields) + `{{pod}}` `{{probe}}` `{{transition}}` `{{reason}}` `{{transition_id}}` `{{timestamp}}`.
+  Unknown `{{…}}` tokens are left literal — receivers using handlebars-style templates in their payload aren't broken.
 
 Source helpers (HCL functions, asset-block only):
 

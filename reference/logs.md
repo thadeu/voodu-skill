@@ -1,9 +1,3 @@
----
-description: vd logs — stream container logs (single, scope, multiplexed)
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd logs` — stream container logs
 
 ```sh

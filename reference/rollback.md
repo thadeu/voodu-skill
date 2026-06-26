@@ -1,9 +1,3 @@
----
-description: vd rollback — revert a deployment to a past release
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd rollback` — revert to a past release
 
 ```sh

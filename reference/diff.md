@@ -1,9 +1,3 @@
----
-description: vd diff — preview what an apply would do
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd diff` — preview changes
 
 ```sh

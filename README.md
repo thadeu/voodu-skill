@@ -1,71 +1,65 @@
-# voodu-claudekit
+# voodu-skill
 
-Claude Code skill + slash commands for the [voodu](https://github.com/thadeu/clowk-voodu) CLI.
+Agent skill for the [voodu](https://github.com/thadeu/clowk-voodu) / `vd` CLI — a reference
+that helps your agent author `.voodu` HCL manifests and answer voodu questions.
 
-Stop re-reading the voodu README every time you forget a flag. Type `/vd:apply` (or `/vd:config`, `/vd:logs`, etc.) and get a focused cheat sheet right inside Claude Code.
+Ask "write a voodu statefulset for postgres" or "migrate this Kamal app to voodu" and the
+agent loads the skill and pulls the matching reference doc.
 
-## What's in here
+Works with **Claude Code, Codex, Cursor**, and any agent supported by [`npx skills`](https://github.com/vercel-labs/skills).
 
-- **`SKILL.md`** — skill entry point. Index of commands + voodu fundamentals.
-- **`reference/`** — deep-dive docs (loaded by the agent when it needs more context).
-  - `apply.md` — `apply`, `diff`, `delete`, prune semantics
-  - `manifests.md` — every HCL kind (deployment, statefulset, ingress, app, asset, job, cronjob, postgres, redis, mongo)
-  - `config.md` — `vd config` (env vars, virtual buckets)
-  - `pods.md` — `logs`, `exec`, `run`, `restart`, `rollback`, `describe`, `get`
-  - `remotes.md` — multi-server SSH
-  - `plugins.md` — official plugins (caddy, postgres, redis, mongo)
-  - `patterns.md` — multi-env, shared-scope, build-mode, assets, secret seeding
-  - `examples.md` — ready-to-paste manifests
-- **`commands/`** — slash commands. One file per verb (`apply.md`, `diff.md`, ...) — typing `/vd:apply` displays the matching cheat sheet.
+## Docs
+
+- Full documentation: https://voodu.clowk.in/docs/
+- LLM reference (`llm.txt`): https://voodu.clowk.in/llm.txt
 
 ## Install
 
-### Option A — `install.sh` (recommended)
+### Recommended — `npx skills` (any agent)
 
 ```sh
-git clone https://github.com/thadeu/voodu-claudekit ~/code/voodu-claudekit
-~/code/voodu-claudekit/install.sh
+npx skills add thadeu/voodu-skill                 # interactive — pick your agent(s)
+
+npx skills add thadeu/voodu-skill -a claude-code  # Claude Code
+npx skills add thadeu/voodu-skill -a codex        # Codex
+npx skills add thadeu/voodu-skill -a cursor       # Cursor
+
+npx skills add thadeu/voodu-skill -g              # global (~/) instead of the project
+npx skills add thadeu/voodu-skill -y              # non-interactive
 ```
 
-The script symlinks:
+The full GitHub URL works too: `npx skills add https://github.com/thadeu/voodu-skill`.
 
-- `~/.claude/skills/voodu` → repo root (skill discovery)
-- `~/.claude/commands/vd` → `repo/commands` (slash command namespace)
+### Claude Code — `install.sh`
 
-### Option B — git submodule
+Symlinks the skill into `~/.claude/skills/voodu`:
 
 ```sh
-cd ~/.claude
-git submodule add https://github.com/thadeu/voodu-claudekit skills/voodu
-ln -s skills/voodu/commands commands/vd
+git clone https://github.com/thadeu/voodu-skill ~/code/voodu-skill
+~/code/voodu-skill/install.sh
 ```
 
 ### Update
 
 ```sh
-cd ~/.claude/skills/voodu && git pull
+npx skills add thadeu/voodu-skill -y      # re-run to pull the latest
+# or, if installed via install.sh:
+cd ~/code/voodu-skill && git pull
 ```
 
-Or with submodules:
+## What's in here
 
-```sh
-cd ~/.claude && git submodule update --remote skills/voodu
-```
+- **`SKILL.md`** — entry point. Command map, voodu fundamentals, and links to the official
+  docs + `reference/`. Loaded automatically when you ask a voodu question.
+- **`reference/`** — deep-dive docs, pulled in when more context is needed.
+  - **Authoring:** `manifests.md` (every HCL kind), `examples.md` (ready-to-paste), `patterns.md` (multi-env, shared-scope, build-mode, assets)
+  - **CLI, one file per verb:** `apply.md`, `diff.md`, `delete.md`, `config.md`, `logs.md`, `exec.md`, `run.md`, `restart.md`, `rollback.md`, `release.md`, `describe.md`, `get.md`, `stats.md`, `remote.md`, `plugins.md`, `procfile.md`
 
 ## Usage
 
-Once installed, open Claude Code in any project. Try:
-
-- `/vd:help` — index of every slash command
-- `/vd:apply` — apply / flags / examples
-- `/vd:procfile` — zero-HCL Procfile deploys + migrate from Heroku/Dokku/Kamal
-- `/vd:config` — env-var management
-- `/vd:logs`, `/vd:exec`, `/vd:run`, `/vd:restart` — runtime ops
-- `/vd:manifests` — every HCL kind
-- `/vd:patterns` — multi-env, shared-scope, build-mode
-- `/vd:examples` — copy-paste-ready manifests
-
-The skill itself also fires automatically when you ask questions like "how do I roll back a deployment in voodu?" — Claude loads `SKILL.md` and pulls the matching reference doc.
+Ask in plain language — "how do I roll back a deployment in voodu?", "write a statefulset
+for postgres", "migrate this Kamal app to voodu" — and the agent loads `SKILL.md` and pulls
+the matching reference doc.
 
 ## Voodu
 

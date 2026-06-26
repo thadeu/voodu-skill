@@ -1,9 +1,3 @@
----
-description: vd stats — live CPU/memory usage joined with configured limits
----
-
-Display the following cheat sheet to the user, verbatim, as markdown.
-
 # `vd stats` — live resource usage
 
 `vd stats` is `docker stats` for voodu-managed pods, joined with the manifest's configured `resources.limits` so you see usage **and** the ceiling in one table.
