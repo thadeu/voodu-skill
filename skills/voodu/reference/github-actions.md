@@ -43,7 +43,7 @@ Every input falls back to an env var, so shared values are declared **once** at 
 | Input | Env fallback | Default | Notes |
 |---|---|---|---|
 | `manifests` | `VOODU_MANIFESTS` | — | One per line (commas ok). File, directory, or glob. |
-| `host` | `VOODU_HOST` | — | `user@hostname`, or bare hostname with `user` set. |
+| `host` | `VOODU_HOST` | — | **`user@hostname`** — no default user. Or bare hostname with `user` set. |
 | `user` | `VOODU_USER` | — | Lets only the address be a secret. |
 | `ssh-key` | `VOODU_SSH_KEY` | — | Private key. |
 | `known-hosts` | `VOODU_KNOWN_HOSTS` | — | From `ssh-keyscan -H <host>`. |
@@ -108,6 +108,7 @@ Registry-mode apply does **not** re-pull a moving tag, so `:latest` can deploy n
 
 ## Gotchas
 
+- **`VOODU_HOST` must carry the user.** It is `user@server_ip`, not `server_ip`. There is **no default** — a bare address fails before connecting, and the action never guesses `root`, matching voodu's own remote parser. Which user is right depends on the image (`root` on a DigitalOcean droplet, `ubuntu`/`ec2-user` on AWS). Splitting it (`VOODU_USER: ubuntu` + `VOODU_HOST: <ip>`) lets only the address be a secret.
 - **`actions/checkout` is required.** Voodu resolves its SSH target by reading a git remote (`git remote get-url voodu`), so the workspace must be a git repo. The action writes that remote itself — never add it by hand in the workflow.
 - **Never `cancel-in-progress: true` on a job that applies.** The reconciler runs async to apply, so cancelling drops the SSH connection while the server keeps going. Queueing is correct: GitHub keeps one pending run per group and cancels the previous pending one, so rapid pushes collapse to "finish current, apply newest".
 - **Group by target, not by branch.** The point is serialising everything aimed at the same server.
