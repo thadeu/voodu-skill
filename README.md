@@ -57,12 +57,13 @@ The skill lives in **`skills/voodu/`** (the standard layout — it lets `npx ski
 - **`skills/voodu/reference/`** — deep-dive docs, pulled in when more context is needed.
   - **Authoring:** `manifests.md` (every HCL kind), `examples.md` (ready-to-paste), `patterns.md` (multi-env, shared-scope, build-mode, assets)
   - **CLI, one file per verb:** `apply.md`, `diff.md`, `delete.md`, `config.md`, `logs.md`, `exec.md`, `run.md`, `restart.md`, `rollback.md`, `release.md`, `describe.md`, `get.md`, `stats.md`, `remote.md`, `plugins.md`, `procfile.md`
+  - **CI:** `github-actions.md` (the `clowk-in/voodu-gh` action — inputs, plan-on-PR, concurrency, and the SSH key's blast radius)
 
 ## Usage
 
 Ask in plain language — "how do I roll back a deployment in voodu?", "write a statefulset
-for postgres", "migrate this Kamal app to voodu" — and the agent loads `SKILL.md` and pulls
-the matching reference doc.
+for postgres", "migrate this Kamal app to voodu", "deploy this repo from GitHub Actions" —
+and the agent loads `SKILL.md` and pulls the matching reference doc.
 
 ## Voodu
 

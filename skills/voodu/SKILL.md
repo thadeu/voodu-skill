@@ -1,6 +1,6 @@
 ---
 name: voodu
-description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / on_deploy + on_probe webhooks, seeding secrets, or multi-server / shared-scope / build-mode setups.
+description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / on_deploy + on_probe webhooks, seeding secrets, multi-server / shared-scope / build-mode setups, or deploying from CI with the GitHub Action (clowk-in/voodu-gh).
 ---
 
 # voodu — cheat sheet
@@ -38,6 +38,7 @@ voodu questions — no theory, just recipes. Drill into `reference/` for the ful
 | Add SSH remote | `vd remote add prod ubuntu@host` |
 | Apply to a remote | `vd apply -f voodu.hcl -r prod` |
 | Install a plugin | `vd plugins:install thadeu/voodu-caddy` |
+| Deploy from GitHub Actions | `uses: clowk-in/voodu-gh@v1` |
 
 ## Drilling deeper
 
@@ -64,6 +65,7 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 | `vd remote` (multi-server SSH) | [reference/remote.md](reference/remote.md) |
 | `vd plugins` (caddy, postgres, redis, mongo) | [reference/plugins.md](reference/plugins.md) |
 | Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
+| Deploy from GitHub Actions (`clowk-in/voodu-gh`) | [reference/github-actions.md](reference/github-actions.md) |
 
 ## Voodu fundamentals
 
@@ -79,4 +81,5 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 - **Init containers.** `init "<name>" { command = [...] }` declares ordered one-shot prep steps that must exit 0 before the main container starts. Runs per-replica spawn; inherits env / volumes / networks / env_from from the parent.
 - **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the entire block to disable TLS. Override `provider = "internal"` for dev/staging self-signed.
 - **Ports are loopback-only by default.** `ports = ["8080"]` binds `127.0.0.1:8080`. Public exposure needs an explicit IP (`0.0.0.0:8080:8080`) — but the normal path is an `ingress`.
+- **Deploying from CI is the same `vd apply`.** The [`clowk-in/voodu-gh`](https://github.com/clowk-in/voodu-gh) action installs the CLI, prepares SSH, and calls `vd apply -y`. Two things bite people: `actions/checkout` is mandatory (voodu resolves its SSH target through a git remote, which the action writes itself), and a job that applies must NOT use `cancel-in-progress: true` — the reconciler runs async, so cancelling leaves a half-applied release racing a newer one. Full recipe: [reference/github-actions.md](reference/github-actions.md).
 - **Private registries.** Declare `registry "ghcr" { url, username, token }` ONCE per host — voodu regenerates `~/.docker/config.json` atomically. Use a service-account / bot token (one-credential-per-host constraint — see [reference/manifests.md](reference/manifests.md)).
