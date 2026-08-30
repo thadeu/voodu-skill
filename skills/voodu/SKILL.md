@@ -1,6 +1,6 @@
 ---
 name: voodu
-description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / on_deploy + on_probe webhooks, seeding secrets, multi-server / shared-scope / build-mode setups, or deploying from CI with the GitHub Action (clowk-in/voodu-gh).
+description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / drain / on_deploy + on_probe webhooks, seeding secrets, multi-server / shared-scope / build-mode setups, or deploying from CI with the GitHub Action (clowk-in/voodu-gh).
 ---
 
 # voodu — cheat sheet
@@ -65,6 +65,7 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 | `vd remote` (multi-server SSH) | [reference/remote.md](reference/remote.md) |
 | `vd plugins` (caddy, postgres, redis, mongo) | [reference/plugins.md](reference/plugins.md) |
 | Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
+| `drain {}` + plugin blocks (`trafik`) — zero-downtime rollouts | [reference/drain.md](reference/drain.md) |
 | Deploy from GitHub Actions (`clowk-in/voodu-gh`) | [reference/github-actions.md](reference/github-actions.md) |
 
 ## Voodu fundamentals
@@ -82,4 +83,6 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 - **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the entire block to disable TLS. Override `provider = "internal"` for dev/staging self-signed.
 - **Ports are loopback-only by default.** `ports = ["8080"]` binds `127.0.0.1:8080`. Public exposure needs an explicit IP (`0.0.0.0:8080:8080`) — but the normal path is an `ingress`.
 - **Deploying from CI is the same `vd apply`.** The [`clowk-in/voodu-gh`](https://github.com/clowk-in/voodu-gh) action installs the CLI, prepares SSH, and calls `vd apply -y`. Two things bite people: `actions/checkout` is mandatory (voodu resolves its SSH target through a git remote, which the action writes itself), and a job that applies must NOT use `cancel-in-progress: true` — the reconciler runs async, so cancelling leaves a half-applied release racing a newer one. Full recipe: [reference/github-actions.md](reference/github-actions.md).
+- **`drain {}` on deployment/statefulset — how a replica winds down.** Two knobs: `grace` is the SIGTERM budget passed to `docker stop -t` (docker's default is 10s, which is why a worker loses an in-flight write on deploy — this needs NO plugin and NO load balancer, and is the first thing to reach for); `timeout` is how long the roll waits for a plugin to report the replica went quiet, and is inert without one. Both are validated at PARSE (unlike other durations in voodu) — a bad value fails the apply instead of silently defaulting, because defaulting would cut the work the block was written to protect. See [reference/manifests.md](reference/manifests.md).
+- **Unknown blocks inside a workload belong to a plugin.** `trafik { port = 8084 }` inside a `deployment` is not an error: voodu carries it verbatim and hands it to the plugin of that name, which validates it at apply. Voodu never reads inside the block. A block whose plugin is not installed fails the apply naming what is missing — which is also where a typo now lands (`probs {}` → "no plugin named probs").
 - **Private registries.** Declare `registry "ghcr" { url, username, token }` ONCE per host — voodu regenerates `~/.docker/config.json` atomically. Use a service-account / bot token (one-credential-per-host constraint — see [reference/manifests.md](reference/manifests.md)).
