@@ -62,7 +62,7 @@ deployment "prod" "esl" {
   ports    = ["8084"]        # ephemeral host port — replicas coexist
 
   drain  { timeout = "30m" }
-  trafik { port = 8084 }     # the CONTAINER port trafik forwards to
+  traffik { port = 8084 }     # the CONTAINER port traffik forwards to
 }
 ```
 
@@ -74,15 +74,15 @@ family must satisfy.
 **Errors land at apply, not in a container:**
 
 ```
-deployment/prod/esl: block "trafik" belongs to a plugin named "trafik", which
+deployment/prod/esl: block "traffik" belongs to a plugin named "traffik", which
 is not installed — run `vd plugins:install <source>` or remove the block
 ```
 
 A block may repeat, with labels naming each one:
 
 ```hcl
-trafik "sip"  { port = 5060 }
-trafik "http" { port = 8084 }
+traffik "sip"  { port = 5060 }
+traffik "http" { port = 8084 }
 ```
 
 ## What the rollout does
@@ -105,15 +105,15 @@ the replacement waits.
 survives container removal; two containers mounting one volume is corruption,
 not less downtime. They still drain and still honour `grace`.
 
-## voodu-trafik
+## voodu-traffik
 
-The L4 TCP load balancer plugin ([thadeu/voodu-trafik](https://github.com/thadeu/voodu-trafik)),
+The L4 TCP load balancer plugin ([thadeu/voodu-traffik](https://github.com/thadeu/voodu-traffik)),
 for raw TCP on ports Caddy does not reach — ESL, database proxies, anything
 where a connection is the unit of work.
 
 ```sh
-vd plugins:install thadeu/voodu-trafik
-vd trafik:status
+vd plugins:install thadeu/voodu-traffik
+vd traffik:status
 ```
 
 `port` is the only required field. `bind` defaults to `127.0.0.1:<port>`
@@ -122,4 +122,4 @@ vd trafik:status
 
 **A pinned host port is refused at apply** — one container can hold it, so
 there is nothing to balance and the rollout cannot surge. Drop the host side
-of `ports` and let trafik be the way in.
+of `ports` and let traffik be the way in.
