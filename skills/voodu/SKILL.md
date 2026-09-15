@@ -1,6 +1,6 @@
 ---
 name: voodu
-description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / drain / on_deploy + on_probe webhooks, seeding secrets, multi-server / shared-scope / build-mode setups, or deploying from CI with the GitHub Action (clowk-in/voodu-gh).
+description: Cheat sheet for the voodu / vd CLI (self-hosted PaaS, HCL manifests). Use whenever the user asks how to do something with voodu — running commands (apply, diff, delete, config, logs, exec, run, restart, rollback, remote, plugins), authoring HCL manifests (deployment, statefulset, ingress, app, asset, job, cronjob, registry, postgres, redis, mongo), wiring probes / init containers / autoscale / drain / on_deploy + on_probe webhooks, seeding secrets, multi-server / shared-scope / build-mode setups, cross-VM networking over WireGuard (vd wire, .voodu names across hosts), or deploying from CI with the GitHub Action (clowk-in/voodu-gh).
 ---
 
 # voodu — cheat sheet
@@ -37,6 +37,8 @@ voodu questions — no theory, just recipes. Drill into `reference/` for the ful
 | List env vars | `vd config <ref> list` |
 | Add SSH remote | `vd remote add prod ubuntu@host` |
 | Apply to a remote | `vd apply -f voodu.hcl -r prod` |
+| Wire two hosts over WireGuard | `vd wire show -r vm-1` → paste as `vd wire add -r vm-2 …` |
+| Peers + tunnel health | `vd wire list` |
 | Install a plugin | `vd plugins:install thadeu/voodu-caddy` |
 | Deploy from GitHub Actions | `uses: clowk-in/voodu-gh@v1` |
 
@@ -63,6 +65,8 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 | `vd get` | [reference/get.md](reference/get.md) |
 | `vd stats` | [reference/stats.md](reference/stats.md) |
 | `vd remote` (multi-server SSH) | [reference/remote.md](reference/remote.md) |
+| `vd wire` (WireGuard peers between hosts) | [reference/wire.md](reference/wire.md) |
+| Cross-VM: names, ports, IPs across hosts | [reference/cross-vm.md](reference/cross-vm.md) |
 | `vd plugins` (caddy, postgres, redis, mongo) | [reference/plugins.md](reference/plugins.md) |
 | Procfile mode + migrate from Heroku/Dokku/Kamal | [reference/procfile.md](reference/procfile.md) |
 | `drain {}` + plugin blocks (`traffik`) — zero-downtime rollouts | [reference/drain.md](reference/drain.md) |
@@ -82,6 +86,7 @@ When you need details (flags, manifest fields, end-to-end examples), open the ma
 - **Init containers.** `init "<name>" { command = [...] }` declares ordered one-shot prep steps that must exit 0 before the main container starts. Runs per-replica spawn; inherits env / volumes / networks / env_from from the parent.
 - **TLS defaults.** Declaring `tls {}` on an ingress (even bare) flips `enabled = true` and `provider = "letsencrypt"`. Omit the entire block to disable TLS. Override `provider = "internal"` for dev/staging self-signed.
 - **Ports are loopback-only by default.** `ports = ["8080"]` binds `127.0.0.1:8080`. Public exposure needs an explicit IP (`0.0.0.0:8080:8080`) — but the normal path is an `ingress`.
+- **Cross-VM needs no `ports` and no IPs.** Hosts wired with `vd wire` share one network: a container reaches `pg-0.contagorda.voodu:5432` on another host by the same name it has locally, on the process's own port. `ports` publishes on the host and plays no part; three postgres in three scopes all listen on 5432 with no `ports` at all. Never put a host port or a tunnel IP in a URL. See [reference/cross-vm.md](reference/cross-vm.md).
 - **Deploying from CI is the same `vd apply`.** The [`clowk-in/voodu-gh`](https://github.com/clowk-in/voodu-gh) action installs the CLI, prepares SSH, and calls `vd apply -y`. Two things bite people: `actions/checkout` is mandatory (voodu resolves its SSH target through a git remote, which the action writes itself), and a job that applies must NOT use `cancel-in-progress: true` — the reconciler runs async, so cancelling leaves a half-applied release racing a newer one. Full recipe: [reference/github-actions.md](reference/github-actions.md).
 - **`drain {}` on deployment/statefulset — how a replica winds down.** Two knobs: `grace` is the SIGTERM budget passed to `docker stop -t` (docker's default is 10s, which is why a worker loses an in-flight write on deploy — this needs NO plugin and NO load balancer, and is the first thing to reach for); `timeout` is how long the roll waits for a plugin to report the replica went quiet, and is inert without one. Both are validated at PARSE (unlike other durations in voodu) — a bad value fails the apply instead of silently defaulting, because defaulting would cut the work the block was written to protect. See [reference/manifests.md](reference/manifests.md).
 - **Unknown blocks inside a workload belong to a plugin.** `traffik { port = 8084 }` inside a `deployment` is not an error: voodu carries it verbatim and hands it to the plugin of that name, which validates it at apply. Voodu never reads inside the block. A block whose plugin is not installed fails the apply naming what is missing — which is also where a typo now lands (`probs {}` → "no plugin named probs").

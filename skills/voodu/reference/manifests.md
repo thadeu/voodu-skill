@@ -73,6 +73,8 @@ Inside `build { ... }`: `context`, `dockerfile`, `path`, `args`, plus nested `la
 ports = ["0.0.0.0:8080:8080"]
 ```
 
+Across voodu hosts, `ports` is not involved: another host reaches the container by name on the process's own port (`api.clowk.voodu:8080`). Leave `ports` out of databases; a fixed host port (`5433:5432`) or an empty host port on a tunnel IP (`10.8.0.1::5432`, which `vd apply` warns about) is never needed. See [cross-vm.md](cross-vm.md).
+
 In practice, public exposure goes through an **ingress**, not the deployment.
 
 ### Resources (CPU/memory, k8s-style)
